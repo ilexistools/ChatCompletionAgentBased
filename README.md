@@ -25,11 +25,11 @@ pip install -r requirements.txt
 
 ## How to use
 
-Add Your GPT Agents Description
+*Add Your GPT Agents Description*
 Add your GPT agent descriptions to the config folder using YAML files. Template model:
 
 ```yaml
-Copiar código
+
 translator:
   role: >
     Portuguese Translator
@@ -41,7 +41,7 @@ translator:
     Word order in Portuguese is different from English.
 ```
 
-Instantiate a New Factory
+*Instantiate a New Factory*
 In your code, import the GPTFactory and instantiate a new factory.
 
 ```python
@@ -50,7 +50,7 @@ from gpts.factory import GPTFactory
 factory = GPTFactory()
 ```
 
-Build the GPT Agent
+*Build the GPT Agent*
 Build the GPT agent using the same name as in the YAML file.
 
 ```python
@@ -58,7 +58,7 @@ Build the GPT agent using the same name as in the YAML file.
 translator = factory.build('translator')
 ```
 
-Run the GPT Agent
+*Run the GPT Agent*
 Run the GPT agent, passing the required inputs. Example:
 
 ```python
@@ -81,10 +81,10 @@ results = translator.run(inputs={'text': text}, temperature=0.7, max_tokens=150,
 print(results)
 ```
 
-Configuration
+## Configuration
 Before running the scripts, ensure your environment variables and configuration files are set up properly. The scripts expect certain environment variables, such as your OpenAI API key.
 
-Dependencies
+## Dependencies
 The repository requires the following dependencies, as specified in the requirements.txt file:
 
 openai==1.37.0
@@ -97,11 +97,11 @@ You can install these dependencies using:
 
 pip install -r requirements.txt
 ```
-Contributing
+## Contributing
 Contributions are welcome. If you have any suggestions or improvements, please open an issue or submit a pull request.
 
-License
+## License
 This project is licensed under the MIT License. See the LICENSE file for details.
 
-Contact
+## Contact
 For any questions or inquiries, please contact me.
