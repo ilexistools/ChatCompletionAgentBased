@@ -16,6 +16,7 @@ This repository contains Python scripts and configurations for creating and mana
 - `ex03.py`: Another example script demonstrating how to return results in JSON.
 - `requirements.txt`: List of dependencies required to run the scripts in this repository.
 - `env-examples`: How to specify the model, url base and api key.
+- `main.py`: Get ready!
 ## Installation
 
 To use the scripts in this repository, you need to install the required dependencies. You can do this by running:
