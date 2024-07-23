@@ -5,7 +5,7 @@ This repository contains various Python scripts and configurations for creating 
 
 # Limitations
 - You must provided all the sequential logic path for use.
-- GPT agents have no capabilities to handle tools.
+- The custom GPT agent has no capabilities to handle tools.
 
 ## Repository Contents
 
@@ -25,12 +25,10 @@ pip install -r requirements.txt
 
 ## How to use
 
-
-How to Use
 Add Your GPT Agents Description
 Add your GPT agent descriptions to the config folder using YAML files. Template model:
 
-yaml
+```yaml
 Copiar código
 translator:
   role: >
@@ -41,27 +39,35 @@ translator:
     As a translator, you must translate the {text} to Brazilian Portuguese.
   knowledge: >
     Word order in Portuguese is different from English.
+```
+
 Instantiate a New Factory
 In your code, import the GPTFactory and instantiate a new factory.
 
-python
-Copiar código
+```python
+
 from gpts.factory import GPTFactory
 factory = GPTFactory()
+```
+
 Build the GPT Agent
 Build the GPT agent using the same name as in the YAML file.
 
-python
-Copiar código
+```python
+
 translator = factory.build('translator')
+```
+
 Run the GPT Agent
 Run the GPT agent, passing the required inputs. Example:
 
-python
-Copiar código
+```python
+
 text = 'This is the text to be translated'
 results = translator.run(inputs={'text': text})
 print(results)
+```
+
 The run function can take the following extra arguments:
 
 temperature
@@ -69,10 +75,12 @@ max_tokens
 model
 Example with extra arguments:
 
-python
-Copiar código
+```python
+
 results = translator.run(inputs={'text': text}, temperature=0.7, max_tokens=150, model='text-davinci-003')
 print(results)
+```
+
 Configuration
 Before running the scripts, ensure your environment variables and configuration files are set up properly. The scripts expect certain environment variables, such as your OpenAI API key.
 
@@ -85,9 +93,10 @@ PyYAML==6.0.1
 tiktoken==0.7.0
 You can install these dependencies using:
 
-bash
-Copiar código
+```bash
+
 pip install -r requirements.txt
+```
 Contributing
 Contributions are welcome. If you have any suggestions or improvements, please open an issue or submit a pull request.
 
@@ -95,4 +104,4 @@ License
 This project is licensed under the MIT License. See the LICENSE file for details.
 
 Contact
-For any questions or inquiries, please contact [your-email@example.com].
+For any questions or inquiries, please contact me.
