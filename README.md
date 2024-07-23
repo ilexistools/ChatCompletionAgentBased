@@ -11,10 +11,11 @@ This repository contains Python scripts and configurations for creating and mana
 
 - `agents.py`: This script contains the definitions and implementations of various AI agents.
 - `factory.py`: This script is responsible for creating and managing instances of AI agents.
-- `ex01.py`: Example script demonstrating the use of AI agents for a specific task.
-- `ex02.py`: Another example script showcasing different functionalities of the AI agents.
+- `ex01.py`: Example script demonstrating the use of a GPT agent for a specific task.
+- `ex02.py`: Another example script showcasing a different configuration (temperature, max_tokens).
+- `ex03.py`: Another example script demonstrating how to return results in JSON.
 - `requirements.txt`: List of dependencies required to run the scripts in this repository.
-
+- `env-examples`: How to specify the model, url base and api key.
 ## Installation
 
 To use the scripts in this repository, you need to install the required dependencies. You can do this by running:

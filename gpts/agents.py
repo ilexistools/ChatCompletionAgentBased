@@ -115,12 +115,4 @@ class GPTAgent:
         else:
             return completion.choices[0].message.content
 
-"""
-mygpt = GptAgent()
-mygpt.role = 'Assistant'
-mygpt.goal = 'Answer questions'
-mygpt.backstory = 'You answer questions briefly and concise.'
-mygpt.knowledge = 'Humans like cats very much. They have them in their houses.'
-mygpt.json_format = "{'result':str}"
-result = mygpt.run('Qual a relação dos humanos com os gatos.')
-"""
+
