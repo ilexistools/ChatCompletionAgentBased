@@ -18,12 +18,21 @@ class GPTFactory:
         dic = data[first_key]
         return (first_key, dic)
     
-    def build(self, name):
+    def build(self, name,**kwargs):
+        model = kwargs.get('model', None)
+        max_tokens = kwargs.get('max_tokens', None)
+        temperature = kwargs.get('temperature', None)
         data = self.config[name]
         gpt = GPTAgent()
         gpt.role = data['role']
         gpt.goal = data['goal']
         gpt.backstory = data['backstory']
         gpt.knowledge = data['knowledge']
+        if model != None:
+            gpt.gpt_model = model 
+        if max_tokens != None:
+            gpt.max_tokens = max_tokens
+        if temperature != None:
+            gpt.temperature = temperature
         return gpt 
 

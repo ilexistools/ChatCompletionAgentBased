@@ -20,6 +20,7 @@ class GPTAgent:
         # Set default
         self.max_tokens = kwargs.get('max_tokens', 1000)
         self.gpt_model = kwargs.get('model', api_model)
+        self.temperature = 0.2
         # GPT agent variables
         self.role = ''
         self.goal = ''
@@ -73,12 +74,13 @@ class GPTAgent:
         max_tokens = kwargs.get('max_tokens', None)
         if max_tokens != None:
             self.max_tokens = max_tokens
-        
+        temperature = kwargs.get('temperature', None)
+        if temperature != None:
+            self.temperature = temperature
         backstory = self.backstory
         if inputs != None:
             for k,v in inputs.items():
                 backstory = self.backstory.replace('{' + str(k) + '}', str(v))
-
         self.add_system_message(self.role)
         self.add_system_message(self.goal)
         if len(self.knowledge) != 0:
@@ -87,22 +89,21 @@ class GPTAgent:
             self.add_system_message(f"JSON format set to: {self.json_format}")
             self.add_user_message('Return response as json.')
         self.add_user_message(backstory)
-        
-
         if self.verbose == True:
             #tokens = self.get_total_tokens_in_messasges()
             print('Role: ' + self.role)
             print('Goal: ' + self.goal)
             print('Backstory: ' + self.backstory)
             print('Max tokens: ' + str(self.max_tokens)) 
+            print('Temperature: ' + str(self.temperature)) 
             #print('Tokens in request: ' + str(tokens))
 
         completion = self.client.chat.completions.create(
             model=self.gpt_model,
             messages=self.messages,
             max_tokens=self.max_tokens,
+            temperature=self.temperature,
             response_format={"type": "json_object"} if self.json_format else None
-
         )
 
 
