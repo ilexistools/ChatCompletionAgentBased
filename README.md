@@ -25,7 +25,7 @@ pip install -r requirements.txt
 
 ## How to use
 
-*Add Your GPT Agents Description*
+### *Add Your GPT Agents Description*
 Add your GPT agent descriptions to the config folder using YAML files. Template model:
 
 ```yaml
@@ -41,7 +41,7 @@ translator:
     Word order in Portuguese is different from English.
 ```
 
-*Instantiate a New Factory*
+### *Instantiate a New Factory*
 In your code, import the GPTFactory and instantiate a new factory.
 
 ```python
@@ -50,7 +50,7 @@ from gpts.factory import GPTFactory
 factory = GPTFactory()
 ```
 
-*Build the GPT Agent*
+### *Build the GPT Agent*
 Build the GPT agent using the same name as in the YAML file.
 
 ```python
@@ -58,7 +58,7 @@ Build the GPT agent using the same name as in the YAML file.
 translator = factory.build('translator')
 ```
 
-*Run the GPT Agent*
+### *Run the GPT Agent*
 Run the GPT agent, passing the required inputs. Example:
 
 ```python
