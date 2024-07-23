@@ -1,7 +1,7 @@
 # Chat Completion Agent Based
 A simple chat completion agent class for llms.
 
-This repository contains various Python scripts and configurations for creating and managing AI agents using large language models (LLMs). The provided scripts are examples of how to utilize OpenAI's API to create custom agents for specific sequential tasks. 
+This repository contains Python scripts and configurations for creating and managing chat completions using large language models (LLMs). The provided scripts are examples of how to utilize OpenAI's API to create custom simple agents for specific sequential tasks. 
 
 ## Limitations
 - You must provided all the sequential logic path for use.
