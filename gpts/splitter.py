@@ -2,12 +2,7 @@ import os
 from dotenv import load_dotenv, find_dotenv
 import tiktoken
 from gpts.factory import GPTFactory
-import logging
 import math 
-
-# Configure logging
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 class TextSplitter:
     def __init__(self):
@@ -24,6 +19,7 @@ class TextSplitter:
         self.GPT4o_mini_name = 'gpt-4o-mini'
         self.GPT4o_mini_max_tokens = 128000
         self.splitter_summarizer = GPTFactory().build('splitter_summarizer')
+        self.splitter_refiner = GPTFactory().build('splitter_refiner')
 
     def count_tokens(self, text, model_name="gpt-4o-mini"):
         try:
@@ -102,6 +98,28 @@ class TextSplitter:
             raise Exception(f"Error splitting text into chunks: {e}")
     
     
+    def refine(self, chunks,verbose=False):
+        if verbose:
+            print('Refining chunks')
+            print('Number of chunks:', len(chunks))
+        final_summary = []
+        i = 0
+        for chunk in chunks:
+            i+=1
+            if verbose:
+                print('Processing chunk', i)
+            if len(final_summary) == 0:
+                new_summary = self.splitter_summarizer.run(inputs={'text': chunk})
+                final_summary.append(new_summary)
+                if verbose:
+                    print(f'Final summary length: {self.count_tokens('\n'.join(final_summary))} tokens')
+            else:
+                new_summary = self.splitter_refiner.run(inputs={'summary': '\n'.join(final_summary), 'text': chunk})
+                final_summary.append(new_summary)
+                if verbose:
+                    print(f'Final summary length: {self.count_tokens('\n'.join(final_summary))} tokens')
+        return '\n'.join(final_summary)
+
 
     def map_reduce(self, chunks, max_tokens=115000, verbose=False, depth=0, max_depth=10):
         if depth > max_depth:
@@ -110,7 +128,7 @@ class TextSplitter:
         summaries = []
         for i, chunk in enumerate(chunks, 1):
             if verbose:
-                logger.info(f"Processing chunk {i} of {len(chunks)}")
+                print(f"Processing chunk {i} of {len(chunks)}")
             try:
                 summary = self.splitter_summarizer.run(inputs={'text': chunk})
                 summary_text = summary
@@ -120,7 +138,7 @@ class TextSplitter:
             if verbose:
                 chunk_token_count = self.count_tokens(chunk, model_name='gpt-4o-mini')
                 summary_token_count = self.count_tokens(summary_text, model_name='gpt-4o-mini')
-                logger.info(f"Chunk size: {chunk_token_count} tokens, Summary size: {summary_token_count} tokens")
+                print(f"Chunk size: {chunk_token_count} tokens, Summary size: {summary_token_count} tokens")
 
             summaries.append(summary_text)
 
@@ -129,7 +147,7 @@ class TextSplitter:
 
         if combined_token_count > max_tokens:
             if verbose:
-                logger.info('Summaries too long, further summarizing...')
+                print('Summaries too long, further summarizing...')
             try:
                 new_chunks = self.split_text(combined_summary, model_name='gpt-4o-mini', input_max_tokens=max_tokens, overlap=0)
             except Exception as e:
@@ -137,10 +155,10 @@ class TextSplitter:
             return self.map_reduce(new_chunks, max_tokens=max_tokens, verbose=verbose, depth=depth + 1, max_depth=max_depth)
         else:
             if verbose:
-                logger.info(f'Final summary length: {combined_token_count} tokens')
+                print(f'Final summary length: {combined_token_count} tokens')
             return combined_summary
     
-    def summarize_to_fit(self, text, max_tokens, max_summary_tokens=1000):
+    def summarize_to_fit(self, text, max_tokens, max_summary_tokens=1000, verbose=False):
         # Tokenizar o texto de entrada
         input_tokens = self.count_tokens(text)
        
@@ -155,9 +173,30 @@ class TextSplitter:
         chunks = self.split_into_chunks(text, model_name='gpt-4o-mini', max_tokens=chunk_size, overlap=100)
 
         # summarize 
-        summary = self.map_reduce(chunks, max_tokens=chunk_size, verbose=True)
+        summary = self.map_reduce(chunks, max_tokens=chunk_size, verbose=verbose)
+
+        return summary
+    
+    def summarize_to_fit_refined(self,  text, max_tokens, max_summary_tokens=1000, verbose=False):
+        # Tokenizar o texto de entrada
+        input_tokens = self.count_tokens(text)
+       
+        # Calcular o número máximo de chunks
+        n_chunks = math.floor(max_tokens / max_summary_tokens)
+        n_chunks = max(1, n_chunks)  # Garantir pelo menos um chunk
+
+        # Calcular o tamanho de cada chunk
+        chunk_size = math.ceil(input_tokens / n_chunks)
+
+        # Dividir o texto em chunks
+        chunks = self.split_into_chunks(text, model_name='gpt-4o-mini', max_tokens=chunk_size, overlap=100)
+
+        # summarize
+        summary = self.refine(chunks, verbose=verbose)
 
         return summary
         
-    
+       
+
+                
    

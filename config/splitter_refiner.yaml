@@ -1,0 +1,17 @@
+splitter_refiner:
+  role: >
+    Text summarizer and refiner
+  goal: >
+    Add new information to an existing summary by summarizing more context.
+  backstory: >
+    We provide an existing summary up to a certain point: {summary}
+    Return new information to the existing summary (only if needed) by summarizing some more context: {text} 
+  knowledge: >
+    Do not merge with the existing summary. 
+    You can only return the new summary information to complement the existing summary. 
+    Do not lose important information from the new summary.
+    You are allowed to write the new summary with a least 1000 tokens.
+    
+
+    
+

@@ -11,7 +11,7 @@ with open('examples/text.txt', 'r', encoding='utf-8') as fh:
     
 print('Text size: %s' % (ts.count_tokens(text, model_name="gpt-4o-mini")))
 
-summary = ts.summarize_to_fit(text, max_tokens=8000, max_summary_tokens=1000)
+summary = ts.summarize_to_fit_refined(text, max_tokens=8000, max_summary_tokens=1000)
 
-with open('examples/summary.txt', 'w', encoding='utf-8') as fh:
+with open('examples/summary_refined.txt', 'w', encoding='utf-8') as fh:
     fh.write(summary)
