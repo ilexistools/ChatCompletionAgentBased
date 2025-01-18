@@ -1,118 +1,105 @@
 import os
+import json
 from openai import OpenAI
 from dotenv import load_dotenv, find_dotenv
-import tiktoken 
-import ast 
+import tiktoken
 
 class GPTAgent:
-
     def __init__(self, **kwargs):
         # Load environment variables
         load_dotenv(find_dotenv())
-        api_key=os.getenv("OPENAI_API_KEY")
-        api_url_base = os.getenv("OPENAI_API_BASE")
-        api_model = os.getenv("OPENAI_MODEL_NAME")
+        self.api_key = os.getenv("OPENAI_API_KEY")
+        self.api_url_base = os.getenv("OPENAI_API_BASE")
+        self.api_model = os.getenv("OPENAI_MODEL_NAME")
+
+        # Validate environment variables
+        if not all([self.api_key, self.api_model]):
+            raise ValueError("Missing required OpenAI environment variables.")
+
         # Set client
-        if api_key == 'lm-studio':
-         self.client = OpenAI(base_url=api_url_base, api_key=api_key)
-        else:
-            self.client = OpenAI(api_key=api_key)
-        # Set default
+        self.client = OpenAI(base_url=self.api_url_base, api_key=self.api_key)
+
+        # Set defaults
         self.max_tokens = kwargs.get('max_tokens', 1000)
-        self.gpt_model = kwargs.get('model', api_model)
-        self.temperature = 0.2
-        # GPT agent variables
-        self.role = ''
-        self.goal = ''
-        self.backstory = ''
-        self.knowledge = ''
-        self.task = ''
-        # Instantiate messages
-        self.messages = []
-        # format
+        self.gpt_model = kwargs.get('model', self.api_model)
+        self.temperature = kwargs.get('temperature', 0.2)
         self.json_format = kwargs.get('json_format', None)
-        # verbose
-        self.verbose = False
-    
-    def add_system_message(self, content):
-        message = {"role": "system", "content": content}
-        self.messages.append(message)
-    
-    def add_user_message(self, content):
-        message = {"role": "user", "content": content}
-        self.messages.append(message)
-    
+        self.verbose = kwargs.get('verbose', False)
+
+        # GPT agent variables
+        self.role = kwargs.get('role', '')
+        self.goal = kwargs.get('goal', '')
+        self.backstory = kwargs.get('backstory', '')
+        self.knowledge = kwargs.get('knowledge', '')
+        self.messages = []
+
+    def add_message(self, role, content):
+        self.messages.append({"role": role, "content": content})
+
     def clear_messages(self):
         self.messages = []
-    
-    def __calculate_tokens(prompt, model="gpt2"):
-        # Escolha o codificador apropriado para o modelo
-        enc = tiktoken.encoding_for_model(model)
-        # Encode o prompt para obter os tokens
-        tokens = enc.encode(prompt)
-        # Calcule o número de tokens
-        num_tokens = len(tokens)
-        return num_tokens
 
-    def get_total_tokens_in_messasges(self):
-        texts = []
-        for dic in self.messages:
-            for k, v in dic.items():
-                texts.append( k + v)
-        return self.__calculate_tokens('\n'.join(texts))
+    def _calculate_tokens(self, prompt, model="gpt2"):
+        try:
+            enc = tiktoken.encoding_for_model(model)
+            return len(enc.encode(prompt))
+        except Exception as e:
+            if self.verbose:
+                print(f"Token calculation error: {e}")
+            return 0
 
-    
-    def run(self,**kwargs):
-        self.clear_messages()
-        verbose = kwargs.get('verbose', None)
-        if verbose != None:
-            self.verbose = verbose 
+    def run(self, **kwargs):
+        # Update parameters dynamically
+        self.verbose = kwargs.get('verbose', self.verbose)
+        self.max_tokens = kwargs.get('max_tokens', self.max_tokens)
+        self.gpt_model = kwargs.get('model', self.gpt_model)
+        self.temperature = kwargs.get('temperature', self.temperature)
         inputs = kwargs.get('inputs', None)
-        model = kwargs.get('model', None)
-        if model != None:
-            self.gpt_model = model
-        max_tokens = kwargs.get('max_tokens', None)
-        if max_tokens != None:
-            self.max_tokens = max_tokens
-        temperature = kwargs.get('temperature', None)
-        if temperature != None:
-            self.temperature = temperature
+
+        # Prepare backstory with placeholders replaced
         backstory = self.backstory
-        if inputs != None:
-            for k,v in inputs.items():
-                backstory = self.backstory.replace('{' + str(k) + '}', str(v))
-        self.add_system_message(self.role)
-        self.add_system_message(self.goal)
-        if len(self.knowledge) != 0:
-            self.add_system_message('Use this information as knowledge base: ' + self.knowledge)
-        if self.json_format is not None:
-            self.add_system_message(f"JSON format set to: {self.json_format}")
-            self.add_user_message('Return response as json.')
-        self.add_user_message(backstory)
-        if self.verbose == True:
-            #tokens = self.get_total_tokens_in_messasges()
-            print('Role: ' + self.role)
-            print('Goal: ' + self.goal)
-            print('Backstory: ' + self.backstory)
-            print('Max tokens: ' + str(self.max_tokens)) 
-            print('Temperature: ' + str(self.temperature)) 
-            #print('Tokens in request: ' + str(tokens))
+        if inputs:
+            for k, v in inputs.items():
+                backstory = backstory.replace(f"{{{k}}}", str(v))
+        
+        # Prepare knowledge with placeholders replaced
+        knowledge = self.knowledge
+        if inputs:
+            for k, v in inputs.items():
+                knowledge = knowledge.replace(f"{{{k}}}", str(v))
 
-        completion = self.client.chat.completions.create(
-            model=self.gpt_model,
-            messages=self.messages,
-            max_tokens=self.max_tokens,
-            temperature=self.temperature,
-            response_format={"type": "json_object"} if self.json_format else None
-        )
+        # Build conversation messages
+        self.clear_messages()
+        self.add_message("system", self.role)
+        self.add_message("system", self.goal)
+        if knowledge:
+            self.add_message("system", f"Use this information as knowledge base: {knowledge}")
+        if self.json_format:
+            self.add_message("system", f"JSON format set to: {self.json_format}")
+            self.add_message("user", "Return response as JSON.")
+        self.add_message("user", backstory)
 
+        if self.verbose:
+            print(f"Role: {self.role}")
+            print(f"Goal: {self.goal}")
+            print(f"Max tokens: {self.max_tokens}")
+            print(f"Temperature: {self.temperature}")
+            print(f"Messages: {self.messages}")
 
-        if self.json_format != None:
-            try:
-                return ast.literal_eval(completion.choices[0].message.content)
-            except:
-                return completion.choices[0].message.content
-        else:
-            return completion.choices[0].message.content
+        # Make API call
+        try:
+            completion = self.client.chat.completions.create(
+                model=self.gpt_model,
+                messages=self.messages,
+                max_tokens=self.max_tokens,
+                temperature=self.temperature,
+                response_format={"type": "json_object"} if self.json_format else None
+            )
 
-
+            response = completion.choices[0].message.content
+            if self.verbose:
+                print(f"Response: {response}")
+            return json.loads(response) if self.json_format else response
+        except Exception as e:
+            print(f"API call error: {e}")
+            return None
