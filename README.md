@@ -27,6 +27,63 @@ pip install -r requirements.txt
 
 ## How to use
 
+### *Simple Example Using `gpt.ask()`*
+
+You can also run a very simple script using the base `gpt.ask()` method directly. This is useful for quick experiments or basic agent-free prompts.
+
+Example (`examples/ask_question.py`):
+
+```python
+import sys
+import os
+
+# Append the project root to sys.path
+lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__).replace('examples', '')))
+sys.path.append(lib_path)
+
+from gpts import gpt
+
+result = gpt.ask("What are the days of the week?")
+print(result)
+```
+
+### *Example Using `gpt.create_agent()` and `gpt.batch_run()`*
+
+This example demonstrates how to create a simple GPT agent on the fly (without using a YAML config) and run it in batch mode over a list of inputs.
+
+Example (`examples/batch_translate.py`):
+
+```python
+from gpts import gpt
+
+# Create a simple agent directly in code
+translator = gpt.create_agent(
+    'Translator',
+    'Translate words to English.',
+    'Translate the word: {word}'
+)
+
+# Define a custom JSON format for output
+translator.json_format = "{'translation':str}"
+
+# Input list of words
+words = [
+    {'word': 'computador'},
+    {'word': 'eletricidade'},
+    {'word': 'dados'}
+]
+
+# Run in batch mode with verbose output
+results = gpt.batch_run(translator, words, verbose=True)
+
+# Print the results
+print("\nResults:\n")
+for result in results:
+    print(result)
+```
+
+
+
 ### *Add Your GPT Agents Description*
 Add your GPT agent descriptions to the config folder using YAML files. Template model:
 
