@@ -34,13 +34,6 @@ You can also run a very simple script using the base `gpt.ask()` method directly
 Example (`examples/ask_question.py`):
 
 ```python
-import sys
-import os
-
-# Append the project root to sys.path
-lib_path = os.path.abspath(os.path.join(os.path.dirname(__file__).replace('examples', '')))
-sys.path.append(lib_path)
-
 from gpts import gpt
 
 result = gpt.ask("What are the days of the week?")
