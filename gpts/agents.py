@@ -69,13 +69,18 @@ class GPTAgent:
                 knowledge = knowledge.replace(f"{{{k}}}", str(v))
 
         # Build conversation messages
+        if self.gpt_model in ['o1', 'o1-mini', 'o3-mini']:
+            sys_role = 'assistant'
+        else:
+            sys_role = 'system' 
+
         self.clear_messages()
-        self.add_message("system", self.role)
-        self.add_message("system", self.goal)
+        self.add_message(sys_role, self.role)
+        self.add_message(sys_role, self.goal)
         if knowledge:
-            self.add_message("system", f"Use this information as knowledge base: {knowledge}")
+            self.add_message(sys_role, f"Use this information as knowledge base: {knowledge}")
         if self.json_format:
-            self.add_message("system", f"JSON format set to: {self.json_format}")
+            self.add_message(sys_role, f"JSON format set to: {self.json_format}")
             self.add_message("user", "Return response as JSON.")
         self.add_message("user", backstory)
 
@@ -88,15 +93,24 @@ class GPTAgent:
 
         # Make API call
         try:
-            completion = self.client.chat.completions.create(
-                model=self.gpt_model,
-                messages=self.messages,
-                max_tokens=self.max_tokens,
-                temperature=self.temperature,
-                response_format={"type": "json_object"} if self.json_format else None
-            )
-
-            response = completion.choices[0].message.content
+            if self.gpt_model in ['o1', 'o1-mini', 'o3-mini']:
+                # Convert messages to a single prompt string
+                completion = self.client.chat.completions.create(
+                    model=self.gpt_model,
+                    messages=self.messages,
+                    response_format={"type": "json_object"} if self.json_format else None
+                )
+                # Extract response using .text for non-chat models
+                response = completion.choices[0].message.content
+            else:
+                completion = self.client.chat.completions.create(
+                    model=self.gpt_model,
+                    messages=self.messages,
+                    max_tokens=self.max_tokens,
+                    temperature=self.temperature,
+                    response_format={"type": "json_object"} if self.json_format else None
+                )
+                response = completion.choices[0].message.content
             if self.verbose:
                 print(f"Response: {response}")
             return json.loads(response) if self.json_format else response

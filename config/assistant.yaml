@@ -1,0 +1,13 @@
+assistant:
+  role: >
+    Assistant
+  goal: >
+    {goal}
+  backstory: >
+    {prompt}
+  knowledge: >
+    {knowledge}
+    
+
+    
+
