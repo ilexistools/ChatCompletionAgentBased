@@ -1,13 +1,10 @@
 assistant:
   role: >
-    Assistant
+    {role}
   goal: >
     {goal}
   backstory: >
     {prompt}
   knowledge: >
-    {knowledge}
-    
-
-    
+    {knowledge}   
 

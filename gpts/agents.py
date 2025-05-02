@@ -1,119 +1,124 @@
-import os
-import json
+import os, json, logging
+from typing import Any, Dict, Optional, List
 from openai import OpenAI
 from dotenv import load_dotenv, find_dotenv
 import tiktoken
 
+logger = logging.getLogger(__name__)
+
 class GPTAgent:
-    def __init__(self, **kwargs):
-        # Load environment variables
+    def __init__(
+        self,
+        *,
+        max_tokens: int = 1000,
+        model: Optional[str] = None,
+        temperature: float = 0.2,
+        json_format: Optional[str] = None,
+        verbose: bool = False,
+        **kwargs: Any
+    ):
+        """Initialize GPTAgent, load env vars, set defaults, and configure client."""
+        self.verbose = verbose
+        self.max_tokens = max_tokens
+        self.gpt_model = model
+        self.temperature = temperature
+        self.json_format = json_format
+
+        # agent context
+        self.role: str      = kwargs.get("role", "")
+        self.goal: str      = kwargs.get("goal", "")
+        self.backstory: str = kwargs.get("backstory", "")
+        self.knowledge: str = kwargs.get("knowledge", "")
+        self.messages: List[Dict[str, str]] = []
+        
+        self._load_env()
+        self._init_client()
+
+    def _load_env(self) -> None:
+        """Load OpenAI credentials from .env."""
         load_dotenv(find_dotenv())
-        self.api_key = os.getenv("OPENAI_API_KEY")
+        self.api_key      = os.getenv("OPENAI_API_KEY")
         self.api_url_base = os.getenv("OPENAI_API_BASE")
-        self.api_model = os.getenv("OPENAI_MODEL_NAME")
+        self.api_model    = os.getenv("OPENAI_MODEL_NAME")
+        if not all([self.api_key, self.api_url_base, self.api_model]):
+            raise EnvironmentError("OPENAI_API_KEY, API_BASE and MODEL must be set.")
 
-        # Validate environment variables
-        if not all([self.api_key, self.api_model]):
-            raise ValueError("Missing required OpenAI environment variables.")
+        if self.gpt_model is None:
+            self.gpt_model = self.api_model
 
-        # Set client
+    def _init_client(self) -> None:
+        """Instantiate OpenAI client."""
         self.client = OpenAI(base_url=self.api_url_base, api_key=self.api_key)
 
-        # Set defaults
-        self.max_tokens = kwargs.get('max_tokens', 1000)
-        self.gpt_model = kwargs.get('model', self.api_model)
-        self.temperature = kwargs.get('temperature', 0.2)
-        self.json_format = kwargs.get('json_format', None)
-        self.verbose = kwargs.get('verbose', False)
+    def _fill_placeholders(self, template: str, inputs: Dict[str, Any]) -> str:
+        for k, v in inputs.items():
+            template = template.replace(f"{{{k}}}", str(v))
+        return template
 
-        # GPT agent variables
-        self.role = kwargs.get('role', '')
-        self.goal = kwargs.get('goal', '')
-        self.backstory = kwargs.get('backstory', '')
-        self.knowledge = kwargs.get('knowledge', '')
-        self.messages = []
-
-    def add_message(self, role, content):
+    def add_message(self, role: str, content: str) -> None:
+        """Append a new message to the conversation buffer."""
         self.messages.append({"role": role, "content": content})
 
-    def clear_messages(self):
-        self.messages = []
+    def clear_messages(self) -> None:
+        """Reset the message history."""
+        self.messages.clear()
 
-    def _calculate_tokens(self, prompt, model="gpt2"):
+    def _calculate_tokens(self, text: str) -> int:
+        """Return approximate token count, or 0 on failure."""
         try:
-            enc = tiktoken.encoding_for_model(model)
-            return len(enc.encode(prompt))
-        except Exception as e:
+            enc = tiktoken.encoding_for_model(self.gpt_model)
+            return len(enc.encode(text))
+        except Exception:
             if self.verbose:
-                print(f"Token calculation error: {e}")
+                logger.debug("Token calculation failed", exc_info=True)
             return 0
+    
+    def get_description(self) -> str:
+        """Return a description of the agent."""
+        description = f"Role: {self.role}\nGoal: {self.goal}\nBackstory: {self.backstory}\nKnowledge: {self.knowledge}"
+        return description
 
-    def run(self, **kwargs):
-        # Update parameters dynamically
-        self.verbose = kwargs.get('verbose', self.verbose)
-        self.max_tokens = kwargs.get('max_tokens', self.max_tokens)
-        self.gpt_model = kwargs.get('model', self.gpt_model)
-        self.temperature = kwargs.get('temperature', self.temperature)
-        inputs = kwargs.get('inputs', None)
+    def run(self, inputs: Optional[Dict[str, Any]] = None, **kwargs: Any) -> Any:
+        """Build messages, call the OpenAI API, and return the response."""
+        # update dynamic params
+        self.verbose     = kwargs.get("verbose", self.verbose)
+        self.max_tokens  = kwargs.get("max_tokens", self.max_tokens)
+        self.gpt_model   = kwargs.get("model", self.gpt_model)
+        self.temperature = kwargs.get("temperature", self.temperature)
 
-        # Prepare backstory with placeholders replaced
-        backstory = self.backstory
-        if inputs:
-            for k, v in inputs.items():
-                backstory = backstory.replace(f"{{{k}}}", str(v))
-        
-        # Prepare knowledge with placeholders replaced
-        knowledge = self.knowledge
-        if inputs:
-            for k, v in inputs.items():
-                knowledge = knowledge.replace(f"{{{k}}}", str(v))
+        # fill templates
+        role      = self._fill_placeholders(self.role, inputs or {})
+        goal      = self._fill_placeholders(self.goal, inputs or {})
+        backstory = self._fill_placeholders(self.backstory, inputs or {})
+        knowledge = self._fill_placeholders(self.knowledge, inputs or {})
 
-        # Build conversation messages
-        if self.gpt_model in ['o1', 'o1-mini', 'o3-mini']:
-            sys_role = 'assistant'
-        else:
-            sys_role = 'system' 
+        # determine system role
+        sys_role = "assistant" if self.gpt_model in ["o1","o1-mini","o3-mini"] else "system"
 
+        # assemble messages
         self.clear_messages()
-        self.add_message(sys_role, self.role)
-        self.add_message(sys_role, self.goal)
-        if knowledge:
-            self.add_message(sys_role, f"Use this information as knowledge base: {knowledge}")
-        if self.json_format:
-            self.add_message(sys_role, f"JSON format set to: {self.json_format}")
-            self.add_message("user", "Return response as JSON.")
+        for part in ("role", "goal", "knowledge", "json_format"):
+            text = locals().get(part)
+            if text:
+                self.add_message(sys_role, f"{part.capitalize()}: {text}")
         self.add_message("user", backstory)
 
         if self.verbose:
-            print(f"Role: {self.role}")
-            print(f"Goal: {self.goal}")
-            print(f"Max tokens: {self.max_tokens}")
-            print(f"Temperature: {self.temperature}")
-            print(f"Messages: {self.messages}")
+            logger.debug("Messages to send: %s", self.messages)
 
-        # Make API call
-        try:
-            if self.gpt_model in ['o1', 'o1-mini', 'o3-mini']:
-                # Convert messages to a single prompt string
-                completion = self.client.chat.completions.create(
-                    model=self.gpt_model,
-                    messages=self.messages,
-                    response_format={"type": "json_object"} if self.json_format else None
-                )
-                # Extract response using .text for non-chat models
-                response = completion.choices[0].message.content
-            else:
-                completion = self.client.chat.completions.create(
+        # API call w/ simple retry
+        for attempt in range(3):
+            try:
+                resp = self.client.chat.completions.create(
                     model=self.gpt_model,
                     messages=self.messages,
                     max_tokens=self.max_tokens,
                     temperature=self.temperature,
-                    response_format={"type": "json_object"} if self.json_format else None
+                    stream=kwargs.get("stream", False),
+                    response_format={"type":"json_object"} if self.json_format else None
                 )
-                response = completion.choices[0].message.content
-            if self.verbose:
-                print(f"Response: {response}")
-            return json.loads(response) if self.json_format else response
-        except Exception as e:
-            print(f"API call error: {e}")
-            return None
+                content = resp.choices[0].message.content
+                return json.loads(content) if self.json_format else content
+            except Exception as e:
+                logger.error("API error (attempt %d): %s", attempt+1, e)
+        raise RuntimeError("Failed to get a response after 3 retries.")

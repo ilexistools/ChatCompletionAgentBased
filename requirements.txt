@@ -2,3 +2,5 @@ openai
 python-dotenv==1.0.1
 PyYAML==6.0.1
 tiktoken==0.7.0
+click
+pypdf2

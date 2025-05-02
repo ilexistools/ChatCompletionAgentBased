@@ -1,29 +1,42 @@
+import os 
 from gpts.factory import GPTFactory
 from gpts.agents import GPTAgent
-from gpts.splitter import TextSplitter
+import tiktoken
+from typing import List
+import gpts.util as util 
+import logging
+from typing import Any, Callable, Dict, List, Optional, Tuple
 
-def ask(prompt, model='gpt-4o-mini', max_tokens=300):
-    """
-    Send a prompt to an assistant model and return its response.
+# OpenAI models
+GPT_4_dot_1='gpt-4.1'
+GPT_4_dot_1_mini='gpt-4.1-mini'
+GPT_4_dot_1_nano='gpt-4.1-nano'
+GPT_4o = 'gpt-4o'
+GPT_4o_mini = 'gpt-4o-mini'
 
-    Parameters:
-        prompt (str): The input prompt to send to the assistant.
-        model (str, optional): The identifier of the GPT model to use. Defaults to 'gpt-4o-mini'.
-        max_tokens (int, optional): The maximum number of tokens allowed in the response. Defaults to 300.
+# Default model and parameters
+default_model = GPT_4_dot_1_nano
+default_max_tokens = 1000
+default_temperature = 0.2
 
-    Returns:
-        str: The assistant's generated response.
-    """
+def ask(prompt:str,**kwargs) -> any:
+    model = kwargs.get('model', default_model)
+    max_tokens = kwargs.get('max_tokens', default_max_tokens)
+    temperature = kwargs.get('temperature', default_temperature)
+    json_format = kwargs.get('json_format', None)
+    role = kwargs.get('role', 'Assistant')
+    goal = kwargs.get('goal', 'You are a helpful assistant.')
+    knowledge = kwargs.get('knowledge', '')
     factory = GPTFactory()
     assistant = factory.build('assistant')
     assistant.gpt_model = model
     assistant.max_tokens = max_tokens 
-    goal = 'You are a helpful assistant.' 
-    knowledge = ''
-    result = assistant.run(inputs={'goal': goal, 'prompt': prompt, 'knowledge': knowledge})
+    assistant.temperature = temperature
+    assistant.json_format = json_format
+    result = assistant.run(inputs={'role': role, 'goal': goal, 'prompt': prompt, 'knowledge': knowledge})
     return result
 
-def build_agent(agent_name):
+def build_agent(agent_name:str)-> GPTAgent:
     """
     Build and return an agent instance based on the provided agent name.
 
@@ -37,7 +50,21 @@ def build_agent(agent_name):
     agent = factory.build(agent_name)
     return agent
 
-def batch_run(agent, inputs: list, verbose=False):
+def build(agent_name:str) -> GPTAgent:
+    """
+    Build and return an agent instance based on the provided agent name.
+
+    Parameters:
+        agent_name (str): The name of the agent to be built.
+
+    Returns:
+        object: An instance of the specified agent.
+    """
+    factory = GPTFactory()
+    agent = factory.build(agent_name)
+    return agent
+
+def batch_run(agent:GPTAgent, inputs: list, **kwargs) -> list:
     """
     Run an agent on a batch of inputs and collect the responses.
 
@@ -49,6 +76,7 @@ def batch_run(agent, inputs: list, verbose=False):
     Returns:
         list: A list containing the result for each input; if an error occurs, None is appended.
     """
+    verbose = kwargs.get('verbose', False)
     results = []
     i = 0
     total = len(inputs)
@@ -64,22 +92,24 @@ def batch_run(agent, inputs: list, verbose=False):
             results.append(None)
     return results
 
-def create_agent(role: str, goal: str, backstory: str, knowledge: str = '', model='gpt-4o-mini'):
-    """
-    Create and configure a GPTAgent with the provided role, goal, backstory, and optional knowledge.
+def design_agent(agent_name:str, task_description:str, input_placeholder:str, **kwargs)->str:
+    model = kwargs.get('model', default_model)
+    max_tokens = kwargs.get('max_tokens', default_max_tokens)
+    temperature = kwargs.get('temperature', default_temperature)
+    factory = GPTFactory()
+    designer = factory.build('_agent_designer')
+    designer.gpt_model = model
+    designer.max_tokens = max_tokens
+    designer.temperature = temperature
+    result = designer.run(inputs={'agent_name': agent_name, 'task_description': task_description, 'input_placeholder': input_placeholder})
+    return result
 
-    Parameters:
-        role (str): The role to assign to the agent.
-        goal (str): The objective or goal for the agent.
-        backstory (str): Background information about the agent.
-        knowledge (str, optional): Additional contextual knowledge for the agent. Defaults to ''.
-        model (str, optional): The identifier of the GPT model to use. Defaults to 'gpt-4o-mini'.
 
-    Returns:
-        GPTAgent: A configured GPTAgent instance.
-    """
-    max_tokens = 1000
-    temperature = 0.2
+def create_agent(role: str, goal: str, backstory: str, knowledge: str, **kwargs) -> GPTAgent:
+    model = kwargs.get('model', default_model)
+    max_tokens = kwargs.get('max_tokens', default_max_tokens)
+    temperature = kwargs.get('temperature', default_temperature)
+    json_format = kwargs.get('json_format', None)
     gpt = GPTAgent()
     gpt.role = role
     gpt.goal = goal 
@@ -88,9 +118,10 @@ def create_agent(role: str, goal: str, backstory: str, knowledge: str = '', mode
     gpt.gpt_model = model 
     gpt.max_tokens = max_tokens
     gpt.temperature = temperature
+    gpt.json_format = json_format
     return gpt 
 
-def count_tokens(text: str, model: str = 'gpt-4o-mini') -> int:
+def count_tokens(text: str, model: str = default_model) -> int:
     """
     Count the number of tokens in a given text using the specified GPT model.
 
@@ -101,232 +132,309 @@ def count_tokens(text: str, model: str = 'gpt-4o-mini') -> int:
     Returns:
         int: The total token count of the text.
     """
-    ts = TextSplitter()
-    tokens_count = ts.count_tokens(text, model)
-    return tokens_count
+    try:
+        enc = tiktoken.encoding_for_model(model)
+        return len(enc.encode(text))
+    except Exception as e:
+        raise Exception(f"Token calculation error: {e}")
 
-def split_text(text: str, max_tokens: int = 100000, model: str = 'gpt-4o-mini', overlap: int = 100) -> list:
+def split_text(text: str, chunk_size: int, model: str = default_model) -> List[str]:
     """
-    Split the input text into chunks based on a maximum token limit and an optional overlap.
+    Split `text` into a list of chunks, each of which contains at most
+    `chunk_size` tokens according to the specified GPT `model`.
 
     Parameters:
-        text (str): The text to be split into chunks.
-        max_tokens (int, optional): The maximum number of tokens per chunk. Defaults to 100000.
-        model (str, optional): The GPT model identifier used for splitting the text. Defaults to 'gpt-4o-mini'.
-        overlap (int, optional): The number of tokens to overlap between consecutive chunks. Defaults to 100.
+        text (str): The full text to split.
+        chunk_size (int): Maximum tokens allowed per chunk.
+        model (str): GPT model identifier for tokenization.
 
     Returns:
-        list: A list of text chunks.
+        List[str]: A list of text chunks, each ≤ chunk_size tokens.
     """
-    ts = TextSplitter()
-    chunks = ts.split_text(text, model_name=model, input_max_tokens=max_tokens, overlap=overlap)
+    words = text.split()
+    chunks: List[str] = []
+    current_chunk = ""
+
+    for word in words:
+        # build the candidate chunk
+        candidate = word if not current_chunk else f"{current_chunk} {word}"
+
+        # if within chunk_size, extend; otherwise flush and start new
+        if count_tokens(candidate, model) <= chunk_size:
+            current_chunk = candidate
+        else:
+            if current_chunk:
+                chunks.append(current_chunk)
+            # if a single word exceeds chunk_size, emit it alone
+            if count_tokens(word, model) > chunk_size:
+                chunks.append(word)
+                current_chunk = ""
+            else:
+                current_chunk = word
+
+    # append any remaining text
+    if current_chunk:
+        chunks.append(current_chunk)
+
     return chunks
 
-def run_slicing(initial_prompt_model: str, final_prompt_model: str, max_tokens_output: int, text: str, chunk_size: int, model: str = 'gpt-4o-mini', overlap: int = 100, verbose: bool = False) -> str:
+def split_text_with_overlap(text: str, chunk_size: int, overlap: int, model: str = default_model) -> List[str]:
     """
-    Process text by splitting it into chunks, applying an initial prompt to each chunk, and then combining
-    the partial results using a final prompt to generate a final output.
+    Split `text` into token-based chunks of size `chunk_size`, with
+    each chunk overlapping the previous by `overlap` tokens.
 
     Parameters:
-        initial_prompt_model (str): The prompt prefix used for processing each chunk.
-        final_prompt_model (str): The prompt prefix used to combine the partial results.
-        max_tokens_output (int): Maximum number of tokens for each assistant response.
-        text (str): The text to be processed.
-        chunk_size (int): The size limit for each text chunk (note: not directly used in splitting in this function).
-        model (str, optional): The GPT model identifier to use. Defaults to 'gpt-4o-mini'.
-        overlap (int, optional): The number of tokens to overlap between chunks. Defaults to 100.
-        verbose (bool, optional): If True, prints progress information. Defaults to False.
+        text (str): The full text to split.
+        chunk_size (int): Number of tokens per chunk.
+        overlap (int): Number of tokens to re-use at the start of each new chunk.
+        model (str): GPT model identifier for tokenization.
 
     Returns:
-        str: The final combined result after slicing and processing.
+        List[str]: A list of overlapping text chunks.
+
+    Raises:
+        ValueError: If overlap >= chunk_size.
     """
-    factory = GPTFactory()
-    assistant = factory.build('assistant')
-    assistant.gpt_model = model
-    assistant.max_tokens = max_tokens_output
-    goal = 'You are a helpful assistant.' 
-    knowledge = ''
-    ts = TextSplitter()
-    # Note: The parameter input_max_tokens is set to a string ('gpt-4o-mini') per original code.
-    chunks = ts.split_text(text, model_name=model, input_max_tokens='gpt-4o-mini', overlap=100)
-    total_chunks = len(chunks)
-    results = []
+    if overlap >= chunk_size:
+        raise ValueError("`overlap` must be smaller than `chunk_size`")
+
+    enc = tiktoken.encoding_for_model(model)
+    token_ids = enc.encode(text)
+    total_tokens = len(token_ids)
+
+    chunks: List[str] = []
+    start = 0
+    step = chunk_size - overlap
+
+    while start < total_tokens:
+        end = min(start + chunk_size, total_tokens)
+        chunk_ids = token_ids[start:end]
+        chunks.append(enc.decode(chunk_ids))
+
+        start += step
+
+    return chunks
+
+def apply_agent_to_files(agent:GPTAgent, source_folder:str, **kwargs) -> list[dict]:
+    verbose = kwargs.get('verbose', False)
+    files = os.listdir(source_folder)
     i = 0
-    for chunk in chunks:
-        i += 1
+    total = len(files)
+    results = []
+    for filename in files:
         if verbose:
-            print(f"Processing {i} of {total_chunks}")
-        try:
-            result = assistant.run(inputs={'goal': goal, 'prompt': initial_prompt_model + text, 'knowledge': knowledge})
-            results.append(str(result))
-        except Exception as e:
-            print(f"Error: {e}")
-    result = assistant.run(inputs={'goal': goal, 'prompt': final_prompt_model + '\n'.join(results), 'knowledge': knowledge})
-    return result
-
-def extract_information(information: str, max_tokens_output: int, text: str, chunk_size: int = 100000, model: str = 'gpt-4o-mini', overlap: int = 100, verbose: bool = False) -> str:
-    """
-    Extract specific information from unstructured text by processing it in chunks and then combining the results.
-
-    Parameters:
-        information (str): A description of the information to extract.
-        max_tokens_output (int): Maximum number of tokens for each assistant response.
-        text (str): The unstructured text to process.
-        chunk_size (int, optional): Maximum token size for each chunk. Defaults to 100000.
-        model (str, optional): The GPT model identifier to use. Defaults to 'gpt-4o-mini'.
-        overlap (int, optional): The number of tokens to overlap between chunks. Defaults to 100.
-        verbose (bool, optional): If True, prints processing progress. Defaults to False.
-
-    Returns:
-        str: A structured result containing the extracted information.
-    """
-    factory = GPTFactory()
-    assistant = factory.build('assistant')
-    assistant.gpt_model = model
-    assistant.max_tokens = max_tokens_output
-    ts = TextSplitter()
-    chunks = ts.split_text(text, model_name=model, input_max_tokens=chunk_size, overlap=overlap)
-    total_chunks = len(chunks)
-    if verbose:
-        print(f"Total chunks: {total_chunks}")
-    if total_chunks > 1:
-        goal = 'Extract specific information from unstructured text.' 
-        prompt = 'Read the text and extract the following set of information: ' + information + '\n\n' + 'The text is: '
-        knowledge = ''
-        results = []
-        i = 0
-        for chunk in chunks:
             i += 1
-            if verbose:
-                print(f"Processing {i} of {total_chunks}")
+            print(f"Processing {i} of {total}")
+        file_path = os.path.join(source_folder, filename)
+        if filename.lower().endswith('.txt'):
+            text = util.read_all_text(file_path)
+        elif filename.lower().endswith('.pdf'):
+            text = util.read_pdf(file_path)
+        elif filename.lower().endswith('.json'):
+            text = util.read_json_file(file_path)
+        elif filename.lower().endswith('.jsonl'):
+            text = util.read_jsonl_file(file_path)
+        elif filename.lower().endswith('.tsv'):
+            text = util.read_tab_separated_file(file_path)
+        elif filename.lower().endswith('.tab'):
+            text = util.read_tab_separated_file(file_path)
+        else:
             try:
-                result = assistant.run(inputs={'goal': goal, 'prompt': prompt + chunk, 'knowledge': knowledge})
-                results.append(str(result))
+                text = util.read_all_text(file_path)
             except Exception as e:
-                print(f"Error: {e}")
-        goal = 'Extract specific information from a set of extracted information results. Key information: ' + information
-        prompt = ('Extract information from multiple segments into a single structured result.' +
-                  '\n\n' + 'The multiple results are: ' + '\n'.join(results))
-        knowledge = 'You must ensure that no information is lost and deliver a clean final output.'
-        result = assistant.run(inputs={'goal': goal, 'prompt': prompt, 'knowledge': knowledge})
-    else:
-        goal = 'Extract specific information from unstructured text.'
-        prompt = 'Read the text and extract the following set of information: ' + '\n'.join(information) + '\n\n' + 'The text is: '
-        knowledge = ''
+                print(f"Error reading {filename}: {e}")
+                continue
+        if text:
+            try:
+                result = agent.run(inputs={'text': text})
+                results.append({
+                        'filename': filename,
+                        'text': text,
+                        'result': result,
+                        'status': 'success'
+                    })
+            except Exception as e:
+                print(f"Error processing {filename}: {e}")
+                results.append({
+                        'filename': filename,
+                        'text': text,
+                        'result': None,
+                        'status': 'error',
+                    })
+    return results
+
+def improve_gpt_prompt(
+    agent: GPTAgent,
+    training_data: List[dict],
+    trainer_model=default_model,
+    **kwargs
+) -> str:
+    verbose = kwargs.get("verbose", False)
+    # Função de log condicional
+    log = print if verbose else lambda *args, **kw: None
+
+    total = len(training_data)
+    results = []
+    evaluator = build('_trainer_evaluator')
+    evaluator.gpt_model = trainer_model
+    evaluator.max_tokens = default_max_tokens
+    # Fase de coleta de resultados e avaliações humanas
+    for idx, instance in enumerate(training_data, start=1):
+        log(f"Training {idx} of {total}")
         try:
-            result = assistant.run(inputs={'goal': goal, 'prompt': prompt + chunks[0], 'knowledge': knowledge})
+            result = agent.run(inputs=instance)
+            log(f"Instance data: {instance}")
+            log(f"Training result: {result}")
+            evaluation = evaluator.run(inputs={'promnpt': agent.get_description(), 'input': instance, 'output': result})
+            results.append((instance, result, evaluation))
+            log(f"AI evaluation: {evaluation}")
+            log("")  # linha em branco
         except Exception as e:
-            print(f"Error: {e}")
-            result = ""
-    return result
+            print(f"Error during training: {e}")
+            # continua para o próximo caso
 
-def summarize(max_tokens_output: int, text: str, chunk_size: int = 100000, model: str = 'gpt-4o-mini', overlap: int = 100, verbose: bool = False) -> str:
-    """
-    Generate a summary of the provided text by processing it in chunks and combining partial summaries.
+    log("\nTraining completed. Evaluating results...")
 
-    Parameters:
-        max_tokens_output (int): Maximum number of tokens for each assistant response.
-        text (str): The text to be summarized.
-        chunk_size (int, optional): Maximum token size for each chunk. Defaults to 100000.
-        model (str, optional): The GPT model identifier to use. Defaults to 'gpt-4o-mini'.
-        overlap (int, optional): The number of tokens to overlap between chunks. Defaults to 100.
-        verbose (bool, optional): If True, prints processing progress. Defaults to False.
-
-    Returns:
-        str: The final summarized text.
-    """
     factory = GPTFactory()
-    assistant = factory.build('assistant')
-    assistant.gpt_model = model
-    assistant.max_tokens = max_tokens_output
-    ts = TextSplitter()
-    chunks = ts.split_text(text, model_name=model, input_max_tokens=chunk_size, overlap=overlap)
-    total_chunks = len(chunks)
-    if verbose:
-        print(f"Total chunks: {total_chunks}")
-    if total_chunks > 1:
-        goal = 'Write a summary of the provided text.'
-        prompt = 'Write a summary of the following text:'
-        knowledge = ''
-        results = []
-        i = 0
-        for chunk in chunks:
-            i += 1
-            if verbose:
-                print(f"Processing {i} of {total_chunks}")
-            try:
-                result = assistant.run(inputs={'goal': goal, 'prompt': prompt + chunk, 'knowledge': knowledge})
-                results.append(str(result))
-            except Exception as e:
-                print(f"Error: {e}")
-        goal = 'Write a summary of the provided text.'
-        prompt = ('Write a final summary based on the following summaries from parts of the whole text:' +
-                  '\n'.join(results))
-        knowledge = 'You must ensure that no information is lost and deliver a clean final summary.'
-        result = assistant.run(inputs={'goal': goal, 'prompt': prompt, 'knowledge': knowledge})
-    else:
-        goal = 'Write a summary of the provided text.'
-        prompt = 'Write a summary of the following text:'
-        knowledge = ''
+
+    # Helper para instanciar e configurar os trainers
+    def make_trainer(name: str):
+        t = factory.build(name)
+        t.gpt_model = trainer_model
+        t.max_tokens = default_max_tokens
+        return t
+
+    # Gera instruções individuais com base nas avaliações
+    trainer = make_trainer("_trainer")
+    instructions = [
+        trainer.run(inputs={
+            "agent_description": agent.get_description(),
+            "instance_data": str(instance),
+            "result": str(result),
+            "human_evaluation": evaluation,
+        })
+        for instance, result, evaluation in results
+    ]
+    log("Training instructions generated.")
+
+    # Sintetiza instruções finais
+    synthesizer = make_trainer("_trainer_synthesizer")
+    final_instructions = synthesizer.run(inputs={
+        "agent_description": agent.get_description(),
+        "training_instructions": "\n".join(instructions),
+    })
+    log("\nFinal training instructions generated.")
+
+    log(f"\n{final_instructions}")
+
+    # Extrai JSON com a nova descrição do agente
+    json_extractor = factory.build("_json_extractor")
+    json_extractor.gpt_model = trainer_model
+    json_extractor.json_format = "{role: str, goal: str, backstory: str, knowledge: str}"
+    json_extractor.max_tokens = default_max_tokens
+
+    json_description = json_extractor.run(inputs={"text": final_instructions})
+
+    # Cria o novo agente e o testa em todos os dados de treino
+    new_agent = create_agent(
+        json_description["role"],
+        json_description["goal"],
+        json_description["backstory"],
+        json_description["knowledge"],
+    )
+    log("\nTesting new agent with training data...")
+    for instance in training_data:
+        print(new_agent.run(inputs=instance))
+    
+    with open('config/improved_agent.yaml', 'w') as f:
+        f.write(final_instructions)
+
+    return final_instructions
+
+def improve_gpt_prompt_by_human(
+    agent: GPTAgent,
+    training_data: List[dict],
+    trainer_model=default_model,
+    **kwargs
+) -> str:
+    verbose = kwargs.get("verbose", False)
+    # Função de log condicional
+    log = print if verbose else lambda *args, **kw: None
+
+    total = len(training_data)
+    results = []
+
+    # Fase de coleta de resultados e avaliações humanas
+    for idx, instance in enumerate(training_data, start=1):
+        log(f"Training {idx} of {total}")
         try:
-            result = assistant.run(inputs={'goal': goal, 'prompt': prompt + chunks[0], 'knowledge': knowledge})
+            result = agent.run(inputs=instance)
+            log(f"Instance data: {instance}")
+            log(f"Training result: {result}")
+            evaluation = input("Human evaluation: ")
+            results.append((instance, result, evaluation))
+            log("")  # linha em branco
         except Exception as e:
-            print(f"Error: {e}")
-            result = ""
-    return result
+            print(f"Error during training: {e}")
+            # continua para o próximo caso
 
-def answer_questions(questions: str, max_tokens_output: int, text: str, chunk_size: int = 100000, model: str = 'gpt-4o-mini', overlap: int = 100, verbose: bool = False) -> str:
-    """
-    Answer specific questions based on the provided text by processing it in chunks and consolidating the answers.
+    log("Training completed. Evaluating results...")
 
-    Parameters:
-        questions (str): The questions to be answered.
-        max_tokens_output (int): Maximum number of tokens for each assistant response.
-        text (str): The text containing information to answer the questions.
-        chunk_size (int, optional): Maximum token size for each chunk. Defaults to 100000.
-        model (str, optional): The GPT model identifier to use. Defaults to 'gpt-4o-mini'.
-        overlap (int, optional): The number of tokens to overlap between chunks. Defaults to 100.
-        verbose (bool, optional): If True, prints processing progress. Defaults to False.
-
-    Returns:
-        str: The final consolidated answer to the questions.
-    """
     factory = GPTFactory()
-    assistant = factory.build('assistant')
-    assistant.gpt_model = model
-    assistant.max_tokens = max_tokens_output
-    ts = TextSplitter()
-    chunks = ts.split_text(text, model_name=model, input_max_tokens=chunk_size, overlap=overlap)
-    total_chunks = len(chunks)
-    if verbose:
-        print(f"Total chunks: {total_chunks}")
-    if total_chunks > 1:
-        goal = 'Answer specific questions from unstructured text.'
-        prompt = 'Read the text and answer the following questions: ' + questions + '\n\n' + 'The text is: '
-        knowledge = ''
-        results = []
-        i = 0
-        for chunk in chunks:
-            i += 1
-            if verbose:
-                print(f"Processing {i} of {total_chunks}")
-            try:
-                result = assistant.run(inputs={'goal': goal, 'prompt': prompt + chunk, 'knowledge': knowledge})
-                results.append(str(result))
-            except Exception as e:
-                print(f"Error: {e}")
-        goal = 'Answer specific questions from unstructured text.'
-        prompt = ('Answer questions from multiple answers from segments of texts into a final set of answers. Questions: ' +
-                  questions + '\n\n' + 'The multiple answers: ' + '\n'.join(results))
-        knowledge = 'You must ensure that no information is lost and deliver a clean final output.'
-        result = assistant.run(inputs={'goal': goal, 'prompt': prompt, 'knowledge': knowledge})
-    else:
-        goal = 'Answer specific questions from unstructured text.'
-        prompt = 'Read the text and answer the following questions: ' + questions + '\n\n' + 'The text is: '
-        knowledge = ''
-        try:
-            result = assistant.run(inputs={'goal': goal, 'prompt': prompt + chunks[0], 'knowledge': knowledge})
-        except Exception as e:
-            print(f"Error: {e}")
-            result = ""
-    return result
+
+    # Helper para instanciar e configurar os trainers
+    def make_trainer(name: str):
+        t = factory.build(name)
+        t.gpt_model = trainer_model
+        t.max_tokens = default_max_tokens
+        return t
+
+    # Gera instruções individuais com base nas avaliações
+    trainer = make_trainer("_trainer")
+    instructions = [
+        trainer.run(inputs={
+            "agent_description": agent.get_description(),
+            "instance_data": str(instance),
+            "result": str(result),
+            "human_evaluation": evaluation,
+        })
+        for instance, result, evaluation in results
+    ]
+    log("Training instructions generated.")
+
+    # Sintetiza instruções finais
+    synthesizer = make_trainer("_trainer_synthesizer")
+    final_instructions = synthesizer.run(inputs={
+        "agent_description": agent.get_description(),
+        "training_instructions": "\n".join(instructions),
+    })
+    log("Final training instructions generated.")
+
+    print(f"Final instructions: {final_instructions}")
+
+    # Extrai JSON com a nova descrição do agente
+    json_extractor = factory.build("_json_extractor")
+    json_extractor.gpt_model = trainer_model
+    json_extractor.json_format = "{role: str, goal: str, backstory: str, knowledge: str}"
+    json_extractor.max_tokens = default_max_tokens
+
+    json_description = json_extractor.run(inputs={"text": final_instructions})
+
+    # Cria o novo agente e o testa em todos os dados de treino
+    new_agent = create_agent(
+        json_description["role"],
+        json_description["goal"],
+        json_description["backstory"],
+        json_description["knowledge"],
+    )
+    log("Testing new agent with training data...")
+    for instance in training_data:
+        print(new_agent.run(inputs=instance))
+    
+    with open('config/improved_agent.yaml', 'w') as f:
+        f.write(final_instructions)
+
+    return final_instructions
+
+
+    
