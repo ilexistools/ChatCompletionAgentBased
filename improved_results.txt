@@ -1,11 +1,11 @@
 1. {'text': 'The film works as an entertaining spy thriller set in the corridors of the Vatican, but also as a serene reflection on commitment, power and faith.[Full review in Spanish]'}
-Expected: Profissional
-Got: Profissional
+Expected: Professional
+Got: Professional
 
 2. {'text': 'The movie was great until the turn no n the ending was such disgusting rewriting of anything that would happen in the conclave. Would give it a zero'}
-Expected: Público
-Got: Público
+Expected: Audience
+Got: Audience
 
 3. {'text': "f it weren't for the ending I've have given this a straight 5 stars. As it was, the twist feels unnecessary and detracts from everything that's gone before."}
-Expected: Público
-Got: Público
+Expected: Audience
+Got: Audience

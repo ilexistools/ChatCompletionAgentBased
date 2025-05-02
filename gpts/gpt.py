@@ -20,6 +20,22 @@ default_max_tokens = 1000
 default_temperature = 0.2
 
 def ask(prompt:str,**kwargs) -> any:
+    """
+    Send a prompt to a GPT-based assistant built by GPTFactory and return its response.
+
+    Parameters:
+        prompt (str): The input prompt to send to the assistant.
+        **kwargs: Optional keyword arguments to configure the assistant:
+            model (str): Identifier of the GPT model to use (default is default_model).
+            max_tokens (int): Maximum number of tokens for the response (default is default_max_tokens).
+            temperature (float): Sampling temperature for response generation (default is default_temperature).
+            json_format (Any): Optional format for JSON output.
+            role (str): Role name for the assistant (default is 'Assistant').
+            goal (str): Instruction or goal guiding the assistant (default is 'You are a helpful assistant.').
+            knowledge (str): Additional context or knowledge to supply to the assistant.
+    Returns:
+        Any: The result returned by the assistant's run method.
+    """
     model = kwargs.get('model', default_model)
     max_tokens = kwargs.get('max_tokens', default_max_tokens)
     temperature = kwargs.get('temperature', default_temperature)
@@ -93,6 +109,21 @@ def batch_run(agent:GPTAgent, inputs: list, **kwargs) -> list:
     return results
 
 def design_agent(agent_name:str, task_description:str, input_placeholder:str, **kwargs)->str:
+    """
+    Generate a design specification for an AI agent using a GPT-based agent designer.
+
+    Parameters:
+        agent_name (str): The name to assign to the designed agent.
+        task_description (str): A description of the tasks and responsibilities of the agent.
+        input_placeholder (str): Placeholder text indicating the expected input format for the agent.
+        **kwargs: Optional keyword arguments to configure the designer:
+            model (str): Identifier of the GPT model to use (default is default_model).
+            max_tokens (int): Maximum number of tokens for the design output (default is default_max_tokens).
+            temperature (float): Sampling temperature for the design generation (default is default_temperature).
+
+    Returns:
+        str: The generated agent design specification.
+    """
     model = kwargs.get('model', default_model)
     max_tokens = kwargs.get('max_tokens', default_max_tokens)
     temperature = kwargs.get('temperature', default_temperature)
@@ -106,6 +137,23 @@ def design_agent(agent_name:str, task_description:str, input_placeholder:str, **
 
 
 def create_agent(role: str, goal: str, backstory: str, knowledge: str, **kwargs) -> GPTAgent:
+    """
+    Create and configure a GPTAgent instance with specified attributes.
+
+    Parameters:
+        role (str): Role assigned to the agent.
+        goal (str): Primary objective the agent aims to achieve.
+        backstory (str): Background narrative for the agent.
+        knowledge (str): Preloaded knowledge or context for the agent.
+        **kwargs: Optional keyword arguments to configure the agent:
+            model (str): Identifier of the GPT model to use (default is default_model).
+            max_tokens (int): Maximum number of tokens for the agent's responses (default is default_max_tokens).
+            temperature (float): Sampling temperature for response generation (default is default_temperature).
+            json_format (Any): Optional format specification for JSON output.
+
+    Returns:
+        GPTAgent: A configured GPTAgent instance.
+    """
     model = kwargs.get('model', default_model)
     max_tokens = kwargs.get('max_tokens', default_max_tokens)
     temperature = kwargs.get('temperature', default_temperature)
@@ -216,6 +264,22 @@ def split_text_with_overlap(text: str, chunk_size: int, overlap: int, model: str
     return chunks
 
 def apply_agent_to_files(agent:GPTAgent, source_folder:str, **kwargs) -> list[dict]:
+    """
+    Apply a GPTAgent to every supported file in a directory and return processing results.
+
+    Parameters:
+        agent (GPTAgent): The agent used to process file contents.
+        source_folder (str): Path to the directory containing files to process.
+        **kwargs: Optional keyword arguments:
+            verbose (bool): If True, prints progress updates to the console.
+
+    Returns:
+        list[dict]: A list of dictionaries for each file with the keys:
+            'filename' (str): Name of the file.
+            'text' (str): Extracted text content from the file.
+            'result' (Any): Output returned by the agent for the file.
+            'status' (str): 'success' if processing succeeded, otherwise 'error'.
+    """
     verbose = kwargs.get('verbose', False)
     files = os.listdir(source_folder)
     i = 0
@@ -272,6 +336,20 @@ def improve_gpt_prompt_by_ai(
     trainer_model=default_model,
     **kwargs
 ) -> str:
+    """
+    Automatically improve a GPT agent’s prompt via AI-driven training, evaluation, and synthesis.
+
+    Parameters:
+        agent (GPTAgent): The initial agent whose prompt and configuration will be optimized.
+        training_data (List[dict]): A collection of input instances and expected outputs for training.
+        trainer_model (str): Identifier of the GPT model to use for training and evaluation (default is default_model).
+        **kwargs:
+            verbose (bool): If True, prints colorized progress and debug messages to the console.
+
+    Returns:
+        str: The final synthesized prompt instructions for the improved agent.
+    """
+
     # Definições de cores ANSI para realce
     COLORS = {
         'reset': '\033[0m',
@@ -419,6 +497,20 @@ def improve_gpt_prompt_by_human(
     trainer_model=default_model,
     **kwargs
 ) -> str:
+    """
+    Interactively improve a GPT agent’s prompt using human-in-the-loop evaluation and AI-driven synthesis.
+
+    Parameters:
+        agent (GPTAgent): The initial agent whose prompt and configuration will be optimized.
+        training_data (List[dict]): A collection of input instances and their outputs for human review.
+        trainer_model (str): Identifier of the GPT model to use for instruction generation and validation (default is default_model).
+        **kwargs:
+            verbose (bool): If True, prints colorized progress and debug messages to the console.
+
+    Returns:
+        str: The final synthesized prompt instructions for the improved agent.
+    """
+
     # Definições de cores ANSI para realce
     COLORS = {
         'reset': '\033[0m',
@@ -568,6 +660,21 @@ def improve_gpt_prompt_by_data(
     trainer_model=default_model,
     **kwargs
 ) -> str:
+    """
+    Automatically improve a GPT agent’s prompt using data-driven training, evaluation, and synthesis.
+
+    Parameters:
+        agent (GPTAgent): The initial agent whose prompt and configuration will be optimized.
+        training_data (List[dict]): A collection of input instances to feed the agent.
+        expected_outputs (List[str]): The corresponding expected outputs for each training instance.
+        trainer_model (str): Identifier of the GPT model to use for training and evaluation (default is default_model).
+        **kwargs:
+            verbose (bool): If True, prints colorized progress and debug messages to the console.
+
+    Returns:
+        str: The final synthesized prompt instructions for the improved agent.
+    """
+
     # Definições de cores ANSI para realce
     COLORS = {
         'reset': '\033[0m',

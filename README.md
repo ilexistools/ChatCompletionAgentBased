@@ -1,159 +1,147 @@
-# Chat Completion Agent Based
-A simple chat completion agent class for llms.
+## Chat Completion Agent Based
 
-This repository contains Python scripts and configurations for creating and managing chat completions using large language models (LLMs). The provided scripts are examples of how to utilize OpenAI's API to create custom simple agents for specific sequential tasks. 
+A simple chat completion agent framework using LLMs.
+
+This repository contains Python modules and configurations for creating, managing, and improving GPT-based agents for various tasks. It provides utility functions and example scripts to demonstrate how to build agents, apply them to data, and optimize their prompts via AI-driven, human-in-the-loop, or data-driven approaches.
 
 ## Limitations
-- You must provided all the sequential logic path for use.
-- The custom GPT agent has no capabilities to handle tools.
+
+* Sequential logic paths must be fully specified by the user.
+* Custom GPT agents cannot directly handle external tools.
 
 ## Repository Contents
 
-- `agents.py`: This script contains the definitions and implementations of various AI agents.
-- `factory.py`: This script is responsible for creating and managing instances of AI agents.
-- `ex01.py`: Example script demonstrating the use of a GPT agent for a specific task.
-- `ex02.py`: Another example script showcasing a different configuration (temperature, max_tokens).
-- `ex03.py`: Another example script demonstrating how to return results in JSON.
-- `requirements.txt`: List of dependencies required to run the scripts in this repository.
-- `env-examples`: How to specify the model, url base and api key.
-- `main.py`: Get ready!
+* `agents.py`: Definitions and implementations of various agent functions:
+
+  * `ask(prompt: str, **kwargs) -> any`
+  * `design_agent(agent_name: str, task_description: str, input_placeholder: str, **kwargs) -> str`
+  * `create_agent(role: str, goal: str, backstory: str, knowledge: str, **kwargs) -> GPTAgent`
+  * `apply_agent_to_files(agent: GPTAgent, source_folder: str, **kwargs) -> list[dict]`
+  * `improve_gpt_prompt_by_ai(agent: GPTAgent, training_data: List[dict], trainer_model=default_model, **kwargs) -> str`
+  * `improve_gpt_prompt_by_human(agent: GPTAgent, training_data: List[dict], trainer_model=default_model, **kwargs) -> str`
+  * `improve_gpt_prompt_by_data(agent: GPTAgent, training_data: List[dict], expected_outputs: List[str], trainer_model=default_model, **kwargs) -> str`
+* `factory.py`: Responsible for creating and managing GPTAgent instances via `GPTFactory`.
+* `util.py`: File-reading and writing utilities: `read_all_text`, `read_pdf`, `read_json_file`, `read_jsonl_file`, `read_tab_separated_file`, `write_all_text`.
+* `ex01.py`, `ex02.py`, `ex03.py`: Example scripts demonstrating basic usage, parameter configuration, and JSON output formatting.
+* `requirements.txt`: Dependency list.
+* `env-examples`: Example environment variable specifications for model, base URL, and API key.
+* `main.py`: Entry point for running experiments.
+
 ## Installation
 
-To use the scripts in this repository, you need to install the required dependencies. You can do this by running:
+Install dependencies with:
 
 ```bash
 pip install -r requirements.txt
 ```
 
-## How to use
+## Usage
 
-### *Simple Example Using `gpt.ask()`*
-
-You can also run a very simple script using the base `gpt.ask()` method directly. This is useful for quick experiments or basic agent-free prompts.
-
-Example (`examples/ask_question.py`):
+### Simple Prompt with `ask()`
 
 ```python
 from gpts import gpt
-
 result = gpt.ask("What are the days of the week?")
 print(result)
 ```
 
-### *Example Using `gpt.create_agent()` and `gpt.batch_run()`*
+Supported `ask` kwargs: `model`, `max_tokens`, `temperature`, `json_format`, `role`, `goal`, `knowledge`.
 
-This example demonstrates how to create a simple GPT agent on the fly (without using a YAML config) and run it in batch mode over a list of inputs.
+### Designing an Agent with `design_agent()`
 
-Example (`examples/batch_translate.py`):
+```python
+from gpts import gpt
+spec = gpt.design_agent(
+    agent_name="Summarizer",
+    task_description="Summarize articles into key bullet points.",
+    input_placeholder="Provide article text here"
+)
+print(spec)
+```
+
+Supported `design_agent` kwargs: `model`, `max_tokens`, `temperature`.
+
+### Creating and Running an Agent
+
+```python
+from gpts import gpt
+agent = gpt.create_agent(
+    role="Translator",
+    goal="Translate text to English and return results in JSON format.",
+    backstory="The text to translate is: {text}",
+    knowledge="Expert translator with context awareness. Language nuances and idioms."
+)
+# Optionally customize JSON output format
+agent.json_format = "{'translation':str}"
+
+result = agent.run(inputs={'text': 'Olá, mundo!'}, temperature=0.7)
+print(result)
+```
+
+### Batch Processing Files with `apply_agent_to_files()`
 
 ```python
 from gpts import gpt
 
-# Create a simple agent directly in code
-translator = gpt.create_agent(
-    'Translator',
-    'Translate words to English.',
-    'Translate the word: {word}'
+agent = gpt.create_agent(
+    role="Translator",
+    goal="Translate text to English and return results in JSON format.",
+    backstory="The text to translate is: {text}",
+    knowledge="Expert translator with context awareness. Language nuances and idioms."
 )
+results = gpt.apply_agent_to_files(agent, 'data/source', verbose=True)
+for entry in results:
+    print(entry['filename'], entry['status'])
+```
 
-# Define a custom JSON format for output
-translator.json_format = "{'translation':str}"
+### Improving Prompts with `improve_gpt_prompt_by_data()`
 
-# Input list of words
-words = [
-    {'word': 'computador'},
-    {'word': 'eletricidade'},
-    {'word': 'dados'}
+```python
+from gpts import gpt
+
+agent = gpt.build('_critics_evaluator')
+agent.gpt_model = 'gpt-4.1-nano'
+
+training_data = [
+    {'text': 'The film works as an entertaining spy thriller set in the corridors of the Vatican, but also as a serene reflection on commitment, power and faith.[Full review in Spanish]'},
+    {'text': 'The movie was great until the turn no n the ending was such disgusting rewriting of anything that would happen in the conclave. Would give it a zero'},
+    {'text': "f it weren't for the ending I've have given this a straight 5 stars. As it was, the twist feels unnecessary and detracts from everything that's gone before."},
 ]
 
-# Run in batch mode with verbose output
-results = gpt.batch_run(translator, words, verbose=True)
+expected_results = ['Professional', 'Audience', 'Audience']
 
-# Print the results
-print("\nResults:\n")
-for result in results:
-    print(result)
-```
-
-
-
-### *Add Your GPT Agents Description*
-Add your GPT agent descriptions to the config folder using YAML files. Template model:
-
-```yaml
-
-translator:
-  role: >
-    Portuguese Translator
-  goal: >
-    Translate text to Brazilian Portuguese.
-  backstory: >
-    As a translator, you must translate the {text} to Brazilian Portuguese.
-  knowledge: >
-    Word order in Portuguese is different from English.
-```
-
-### *Instantiate a New Factory*
-In your code, import the GPTFactory and instantiate a new factory.
-
-```python
-
-from gpts.factory import GPTFactory
-factory = GPTFactory()
-```
-
-### *Build the GPT Agent*
-Build the GPT agent using the same name as in the YAML file.
-
-```python
-
-translator = factory.build('translator')
-```
-
-### *Run the GPT Agent*
-Run the GPT agent, passing the required inputs. Example:
-
-```python
-
-text = 'This is the text to be translated'
-results = translator.run(inputs={'text': text})
-print(results)
-```
-
-The run function can take the following extra arguments:
-
-temperature
-max_tokens
-model
-Example with extra arguments:
-
-```python
-
-results = translator.run(inputs={'text': text}, temperature=0.7, max_tokens=150, model='text-davinci-003')
-print(results)
+gpt.improve_gpt_prompt_by_data(agent, training_data, expected_results, 'gpt-4.1-mini', verbose=True)
+# gpt.improve_gpt_prompt_by_ai(agent, training_data, 'gpt-4.1-mini', verbose=True)
+# gpt.improve_gpt_prompt_by_human(agent, training_data, 'gpt-4.1-mini', verbose=True)
 ```
 
 ## Configuration
-Before running the scripts, ensure your environment variables and configuration files are set up properly. The scripts expect certain environment variables, such as your OpenAI API key.
+
+Configure your OpenAI API key and optional defaults in environment variables or a config file as shown in `env-examples`.
 
 ## Dependencies
-The repository requires the following dependencies, as specified in the requirements.txt file:
 
-openai==1.37.0
-python-dotenv==1.0.1
-PyYAML==6.0.1
-tiktoken==0.7.0
-You can install these dependencies using:
+* click>=8.1.8,<8.2.0
+* openai>=1.76.2,<2.0.0
+* PyPDF2>=3.0.1,<3.1.0
+* python-dotenv>=1.1.0,<1.2.0
+* PyYAML>=6.0.2,<7.0.0
+* tiktoken>=0.7.0,<1.0.0
+
+Install with:
 
 ```bash
-
 pip install -r requirements.txt
 ```
+
 ## Contributing
-Contributions are welcome. If you have any suggestions or improvements, please open an issue or submit a pull request.
+
+Contributions are welcome! Please open issues or submit pull requests.
 
 ## License
-This project is licensed under the MIT License. See the LICENSE file for details.
+
+MIT License. See the LICENSE file for details.
 
 ## Contact
-For any questions or inquiries, please contact me.
+
+For questions or inquiries, please contact the repository maintainer.
