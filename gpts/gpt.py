@@ -263,91 +263,153 @@ def apply_agent_to_files(agent:GPTAgent, source_folder:str, **kwargs) -> list[di
                     })
     return results
 
-def improve_gpt_prompt(
+
+
+
+def improve_gpt_prompt_by_ai(
     agent: GPTAgent,
     training_data: List[dict],
     trainer_model=default_model,
     **kwargs
 ) -> str:
-    verbose = kwargs.get("verbose", False)
-    # Função de log condicional
-    log = print if verbose else lambda *args, **kw: None
+    # Definições de cores ANSI para realce
+    COLORS = {
+        'reset': '\033[0m',
+        'bold': '\033[1m',
+        'red': '\033[31m',
+        'green': '\033[32m',
+        'yellow': '\033[33m',
+        'blue': '\033[34m',
+    }
+    def color_text(text: str, color: str = 'reset') -> str:
+        return f"{COLORS.get(color, COLORS['reset'])}{text}{COLORS['reset']}"
 
-    total = len(training_data)
-    results = []
+    verbose = kwargs.get('verbose', False)
+    log = print if verbose else lambda *args, **kwargs: None
+
     evaluator = build('_trainer_evaluator')
     evaluator.gpt_model = trainer_model
     evaluator.max_tokens = default_max_tokens
-    # Fase de coleta de resultados e avaliações humanas
-    for idx, instance in enumerate(training_data, start=1):
-        log(f"Training {idx} of {total}")
-        try:
-            result = agent.run(inputs=instance)
-            log(f"Instance data: {instance}")
-            log(f"Training result: {result}")
-            evaluation = evaluator.run(inputs={'promnpt': agent.get_description(), 'input': instance, 'output': result})
-            results.append((instance, result, evaluation))
-            log(f"AI evaluation: {evaluation}")
-            log("")  # linha em branco
-        except Exception as e:
-            print(f"Error during training: {e}")
-            # continua para o próximo caso
-
-    log("\nTraining completed. Evaluating results...")
 
     factory = GPTFactory()
-
-    # Helper para instanciar e configurar os trainers
-    def make_trainer(name: str):
+    def make_trainer(
+        name: str,
+        max_tokens: int = default_max_tokens,
+        temperature: float = None,
+        json_format: str = None,
+    ):
         t = factory.build(name)
         t.gpt_model = trainer_model
-        t.max_tokens = default_max_tokens
+        t.max_tokens = max_tokens
+        if temperature is not None:
+            t.temperature = temperature
+        if json_format is not None:
+            t.json_format = json_format
         return t
 
-    # Gera instruções individuais com base nas avaliações
-    trainer = make_trainer("_trainer")
-    instructions = [
-        trainer.run(inputs={
-            "agent_description": agent.get_description(),
-            "instance_data": str(instance),
-            "result": str(result),
-            "human_evaluation": evaluation,
+    # Fase 1: Execução e avaliação
+    log(color_text('--- Iniciando avaliação inicial ---', 'blue'))
+    results = []
+    total = len(training_data)
+    for idx, instance in enumerate(training_data, start=1):
+        log(color_text(f"[{idx}/{total}] Executando agente...", 'yellow'))
+        try:
+            output = agent.run(inputs=instance)
+            eval_resp = evaluator.run(inputs={
+                'prompt': agent.get_description(),
+                'input': instance,
+                'output': output,
+            })
+            results.append((instance, output, eval_resp))
+            log(color_text('✔ Output obtido com sucesso', 'green'))
+        except Exception as e:
+            log(color_text(f"✖ Erro na instância {idx}: {e}", 'red'))
+
+    log(color_text('--- Avaliação inicial concluída ---', 'blue'))
+
+    # Fase 2: Geração de instruções por instância
+    log(color_text('--- Gerando instruções de fine-tuning ---', 'blue'))
+    trainer = make_trainer('_trainer')
+    instructions = []
+    for instance, output, eval_resp in results:
+        instr = trainer.run(inputs={
+            'agent_description': agent.get_description(),
+            'instance_data': instance,
+            'result': output,
+            'human_evaluation': eval_resp,
         })
-        for instance, result, evaluation in results
-    ]
-    log("Training instructions generated.")
+        instructions.append(instr)
+    log(color_text('✔ Instruções individuais geradas', 'green'))
 
-    # Sintetiza instruções finais
-    synthesizer = make_trainer("_trainer_synthesizer")
-    final_instructions = synthesizer.run(inputs={
-        "agent_description": agent.get_description(),
-        "training_instructions": "\n".join(instructions),
-    })
-    log("\nFinal training instructions generated.")
-
-    log(f"\n{final_instructions}")
-
-    # Extrai JSON com a nova descrição do agente
-    json_extractor = factory.build("_json_extractor")
-    json_extractor.gpt_model = trainer_model
-    json_extractor.json_format = "{role: str, goal: str, backstory: str, knowledge: str}"
-    json_extractor.max_tokens = default_max_tokens
-
-    json_description = json_extractor.run(inputs={"text": final_instructions})
-
-    # Cria o novo agente e o testa em todos os dados de treino
-    new_agent = create_agent(
-        json_description["role"],
-        json_description["goal"],
-        json_description["backstory"],
-        json_description["knowledge"],
+    # Fase 3: Validação binária das instruções
+    log(color_text('--- Validando instruções ---', 'blue'))
+    validator = make_trainer(
+        '_trainer_binary_validator',
+        max_tokens=200,
+        temperature=0.2,
+        json_format='{result: int}'
     )
-    log("\nTesting new agent with training data...")
-    for instance in training_data:
-        print(new_agent.run(inputs=instance))
-    
-    with open('config/improved_agent.yaml', 'w') as f:
-        f.write(final_instructions)
+    human_scores = [
+        validator.run(inputs={'evaluation': instr}).get('result', 0)
+        for instr in instructions
+    ]
+    log(color_text('✔ Validação completa', 'green'))
+
+    # Fase 4: Síntese de instruções finais
+    log(color_text('--- Sintetizando instruções finais ---', 'blue'))
+    synthesizer = make_trainer('_trainer_synthesizer')
+    final_instructions = synthesizer.run(inputs={
+        'agent_description': agent.get_description(),
+        'training_instructions': '\n'.join(instructions),
+    })
+    log(color_text('✔ Instruções finais sintetizadas', 'green'))
+
+    # Fase 5: Extração de novo config JSON
+    log(color_text('--- Extraindo configuração do agente melhorado ---', 'blue'))
+    extractor = make_trainer(
+        '_json_extractor',
+        json_format='{role: str, goal: str, backstory: str, knowledge: str}'
+    )
+    config = extractor.run(inputs={'text': final_instructions})
+
+    new_agent = create_agent(
+        config['role'],
+        config['goal'],
+        config['backstory'],
+        config['knowledge'],
+    )
+    log(color_text('✔ Novo agente criado', 'green'))
+
+    # Fase 6: Teste do novo agente e cálculo de precisão
+    log(color_text('--- Testando agente melhorado ---', 'blue'))
+    test_scores = []
+    for idx, instance in enumerate(training_data, start=1):
+        try:
+            output = new_agent.run(inputs=instance)
+            eval_resp = evaluator.run(inputs={
+                'prompt': agent.get_description(),
+                'input': instance,
+                'output': output,
+            })
+            valid = validator.run(inputs={'evaluation': eval_resp}).get('result', 0)
+            test_scores.append((instance, output, valid))
+            log(color_text(f"[{idx}] Resultado validado: {valid}", 'yellow'))
+        except Exception as e:
+            log(color_text(f"✖ Erro no teste da instância {idx}: {e}", 'red'))
+
+    tp = sum(1 for gs, ts in zip(human_scores, test_scores) if gs == 1 and ts[2] == 1)
+    fp = sum(1 for gs, ts in zip(human_scores, test_scores) if gs == 0 and ts[2] == 1)
+    precision = tp / (tp + fp) if (tp + fp) else 0.0
+    print(color_text(f"Precision final: {precision:.2f}", 'bold'))
+
+    # Fase 7: Salvando resultados
+    util.write_all_text(
+        'improved_results.txt',
+        '\n\n'.join(
+            f"{i+1}. {inst}\n{out}" for i, (inst, out, _) in enumerate(test_scores)
+        )
+    )
+    util.write_all_text('config/improved_agent.yaml', final_instructions)
 
     return final_instructions
 
@@ -357,84 +419,292 @@ def improve_gpt_prompt_by_human(
     trainer_model=default_model,
     **kwargs
 ) -> str:
-    verbose = kwargs.get("verbose", False)
-    # Função de log condicional
-    log = print if verbose else lambda *args, **kw: None
+    # Definições de cores ANSI para realce
+    COLORS = {
+        'reset': '\033[0m',
+        'bold': '\033[1m',
+        'red': '\033[31m',
+        'green': '\033[32m',
+        'yellow': '\033[33m',
+        'blue': '\033[34m',
+    }
+    def color_text(text: str, color: str = 'reset') -> str:
+        return f"{COLORS.get(color, COLORS['reset'])}{text}{COLORS['reset']}"
 
-    total = len(training_data)
-    results = []
+    verbose = kwargs.get('verbose', False)
+    log = print if verbose else lambda *args, **kwargs: None
 
-    # Fase de coleta de resultados e avaliações humanas
-    for idx, instance in enumerate(training_data, start=1):
-        log(f"Training {idx} of {total}")
-        try:
-            result = agent.run(inputs=instance)
-            log(f"Instance data: {instance}")
-            log(f"Training result: {result}")
-            evaluation = input("Human evaluation: ")
-            results.append((instance, result, evaluation))
-            log("")  # linha em branco
-        except Exception as e:
-            print(f"Error during training: {e}")
-            # continua para o próximo caso
-
-    log("Training completed. Evaluating results...")
+    # Avaliador automático (usado apenas na fase de teste)
+    evaluator = build('_trainer_evaluator')
+    evaluator.gpt_model = trainer_model
+    evaluator.max_tokens = default_max_tokens
 
     factory = GPTFactory()
-
-    # Helper para instanciar e configurar os trainers
-    def make_trainer(name: str):
+    def make_trainer(
+        name: str,
+        max_tokens: int = default_max_tokens,
+        temperature: float = None,
+        json_format: str = None,
+    ):
         t = factory.build(name)
         t.gpt_model = trainer_model
-        t.max_tokens = default_max_tokens
+        t.max_tokens = max_tokens
+        if temperature is not None:
+            t.temperature = temperature
+        if json_format is not None:
+            t.json_format = json_format
         return t
 
-    # Gera instruções individuais com base nas avaliações
-    trainer = make_trainer("_trainer")
-    instructions = [
-        trainer.run(inputs={
-            "agent_description": agent.get_description(),
-            "instance_data": str(instance),
-            "result": str(result),
-            "human_evaluation": evaluation,
+    # Fase 1: Execução e avaliação HUMANA via input() com comentário
+    log(color_text('--- Iniciando avaliação humana via input() ---', 'blue'))
+    results = []
+    total = len(training_data)
+    for idx, instance in enumerate(training_data, start=1):
+        log(color_text(f"[{idx}/{total}] Executando agente...", 'yellow'))
+        try:
+            output = agent.run(inputs=instance)
+            # Exibir instância e saída para avaliação manual
+            print(color_text(f"Instância: {instance}", 'yellow'))
+            print(color_text(f"Saída: {output}", 'yellow'))
+            # Solicitar comentário livre
+            comment = input(color_text("Comentário sobre a saída: ", 'bold'))
+            results.append((instance, output, comment))
+            log(color_text(f"Comentário recebido: {comment}", 'green'))
+        except Exception as e:
+            log(color_text(f"✖ Erro na instância {idx}: {e}", 'red'))
+
+    log(color_text('--- Avaliação humana concluída ---', 'blue'))
+
+    # Fase 2: Geração de instruções por instância
+    log(color_text('--- Gerando instruções de fine-tuning ---', 'blue'))
+    trainer = make_trainer('_trainer')
+    instructions = []
+    for instance, output, human_comment in results:
+        instr = trainer.run(inputs={
+            'agent_description': agent.get_description(),
+            'instance_data': instance,
+            'result': output,
+            'human_evaluation': human_comment,
         })
-        for instance, result, evaluation in results
-    ]
-    log("Training instructions generated.")
+        instructions.append(instr)
+    log(color_text('✔ Instruções individuais geradas', 'green'))
 
-    # Sintetiza instruções finais
-    synthesizer = make_trainer("_trainer_synthesizer")
-    final_instructions = synthesizer.run(inputs={
-        "agent_description": agent.get_description(),
-        "training_instructions": "\n".join(instructions),
-    })
-    log("Final training instructions generated.")
-
-    print(f"Final instructions: {final_instructions}")
-
-    # Extrai JSON com a nova descrição do agente
-    json_extractor = factory.build("_json_extractor")
-    json_extractor.gpt_model = trainer_model
-    json_extractor.json_format = "{role: str, goal: str, backstory: str, knowledge: str}"
-    json_extractor.max_tokens = default_max_tokens
-
-    json_description = json_extractor.run(inputs={"text": final_instructions})
-
-    # Cria o novo agente e o testa em todos os dados de treino
-    new_agent = create_agent(
-        json_description["role"],
-        json_description["goal"],
-        json_description["backstory"],
-        json_description["knowledge"],
+    # Fase 3: Validação binária das instruções
+    log(color_text('--- Validando instruções ---', 'blue'))
+    validator = make_trainer(
+        '_trainer_binary_validator',
+        max_tokens=200,
+        temperature=0.2,
+        json_format='{result: int}'
     )
-    log("Testing new agent with training data...")
-    for instance in training_data:
-        print(new_agent.run(inputs=instance))
-    
-    with open('config/improved_agent.yaml', 'w') as f:
-        f.write(final_instructions)
+    human_scores = [
+        validator.run(inputs={'evaluation': instr}).get('result', 0)
+        for instr in instructions
+    ]
+    log(color_text('✔ Validação completa', 'green'))
+
+    # Fase 4: Síntese de instruções finais
+    log(color_text('--- Sintetizando instruções finais ---', 'blue'))
+    synthesizer = make_trainer('_trainer_synthesizer')
+    final_instructions = synthesizer.run(inputs={
+        'agent_description': agent.get_description(),
+        'training_instructions': '\n'.join(instructions),
+    })
+    log(color_text('✔ Instruções finais sintetizadas', 'green'))
+
+    # Fase 5: Extração de novo config JSON
+    log(color_text('--- Extraindo configuração do agente melhorado ---', 'blue'))
+    extractor = make_trainer(
+        '_json_extractor',
+        json_format='{role: str, goal: str, backstory: str, knowledge: str}'
+    )
+    config = extractor.run(inputs={'text': final_instructions})
+
+    new_agent = create_agent(
+        config['role'],
+        config['goal'],
+        config['backstory'],
+        config['knowledge'],
+    )
+    log(color_text('✔ Novo agente criado', 'green'))
+
+    # Fase 6: Teste do novo agente e cálculo de precisão
+    log(color_text('--- Testando agente melhorado ---', 'blue'))
+    test_scores = []
+    for idx, instance in enumerate(training_data, start=1):
+        try:
+            output = new_agent.run(inputs=instance)
+            eval_resp = evaluator.run(inputs={
+                'prompt': agent.get_description(),
+                'input': instance,
+                'output': output,
+            })
+            valid = validator.run(inputs={'evaluation': eval_resp}).get('result', 0)
+            test_scores.append((instance, output, valid))
+            log(color_text(f"[{idx}] Resultado validado: {valid}", 'yellow'))
+        except Exception as e:
+            log(color_text(f"✖ Erro no teste da instância {idx}: {e}", 'red'))
+
+    tp = sum(1 for gs, ts in zip(human_scores, test_scores) if gs == 1 and ts[2] == 1)
+    fp = sum(1 for gs, ts in zip(human_scores, test_scores) if gs == 0 and ts[2] == 1)
+    precision = tp / (tp + fp) if (tp + fp) else 0.0
+    print(color_text(f"Precision final: {precision:.2f}", 'bold'))
+
+    # Fase 7: Salvando resultados
+    util.write_all_text(
+        'improved_results.txt',
+        '\n\n'.join(
+            f"{i+1}. {inst}\n{out}" for i, (inst, out, _) in enumerate(test_scores)
+        )
+    )
+    util.write_all_text('config/improved_agent.yaml', final_instructions)
+
+    return final_instructions
+
+def improve_gpt_prompt_by_data(
+    agent: GPTAgent,
+    training_data: List[dict],
+    expected_outputs: List[str],
+    trainer_model=default_model,
+    **kwargs
+) -> str:
+    # Definições de cores ANSI para realce
+    COLORS = {
+        'reset': '\033[0m',
+        'bold': '\033[1m',
+        'red': '\033[31m',
+        'green': '\033[32m',
+        'yellow': '\033[33m',
+        'blue': '\033[34m',
+    }
+    def color_text(text: str, color: str = 'reset') -> str:
+        return f"{COLORS.get(color, COLORS['reset'])}{text}{COLORS['reset']}"
+
+    verbose = kwargs.get('verbose', False)
+    log = print if verbose else lambda *args, **kwargs: None
+
+    # Avaliador automático (usado apenas na fase de teste)
+    evaluator = build('_trainer_evaluator')
+    evaluator.gpt_model = trainer_model
+    evaluator.max_tokens = default_max_tokens
+
+    factory = GPTFactory()
+    def make_trainer(
+        name: str,
+        max_tokens: int = default_max_tokens,
+        temperature: float = None,
+        json_format: str = None,
+    ):
+        t = factory.build(name)
+        t.gpt_model = trainer_model
+        t.max_tokens = max_tokens
+        if temperature is not None:
+            t.temperature = temperature
+        if json_format is not None:
+            t.json_format = json_format
+        return t
+
+    # Fase 1: Execução e coleta de pares (output, expected)
+    log(color_text('--- Iniciando avaliação por dados esperados ---', 'blue'))
+    results = []
+    total = len(training_data)
+    for idx, (instance, expected) in enumerate(zip(training_data, expected_outputs), start=1):
+        log(color_text(f"[{idx}/{total}] Executando agente...", 'yellow'))
+        try:
+            output = agent.run(inputs=instance)
+            log(color_text(f"Output: {output}", 'yellow'))
+            log(color_text(f"Expected: {expected}", 'yellow'))
+            results.append((instance, output, expected))
+        except Exception as e:
+            log(color_text(f"✖ Erro na instância {idx}: {e}", 'red'))
+
+    log(color_text('--- Coleta de resultados concluída ---', 'blue'))
+
+    # Fase 2: Geração de instruções por instância
+    log(color_text('--- Gerando instruções de fine-tuning ---', 'blue'))
+    trainer = make_trainer('_trainer')
+    instructions = []
+    for instance, output, expected in results:
+        instr = trainer.run(inputs={
+            'agent_description': agent.get_description(),
+            'instance_data': instance,
+            'result': output,
+            'human_evaluation': expected,
+        })
+        instructions.append(instr)
+    log(color_text('✔ Instruções individuais geradas', 'green'))
+
+    # Fase 3: Validação binária das instruções
+    log(color_text('--- Validando instruções ---', 'blue'))
+    validator = make_trainer(
+        '_trainer_binary_validator',
+        max_tokens=200,
+        temperature=0.2,
+        json_format='{result: int}'
+    )
+    instr_scores = [
+        validator.run(inputs={'evaluation': instr}).get('result', 0)
+        for instr in instructions
+    ]
+    log(color_text('✔ Validação completa', 'green'))
+
+    # Fase 4: Síntese de instruções finais
+    log(color_text('--- Sintetizando instruções finais ---', 'blue'))
+    synthesizer = make_trainer('_trainer_synthesizer')
+    final_instructions = synthesizer.run(inputs={
+        'agent_description': agent.get_description(),
+        'training_instructions': '\n'.join(instructions),
+    })
+    log(color_text('✔ Instruções finais sintetizadas', 'green'))
+
+    # Fase 5: Extração de novo config JSON
+    log(color_text('--- Extraindo configuração do agente melhorado ---', 'blue'))
+    extractor = make_trainer(
+        '_json_extractor',
+        json_format='{role: str, goal: str, backstory: str, knowledge: str}'
+    )
+    config = extractor.run(inputs={'text': final_instructions})
+
+    new_agent = create_agent(
+        config['role'],
+        config['goal'],
+        config['backstory'],
+        config['knowledge'],
+    )
+    log(color_text('✔ Novo agente criado', 'green'))
+
+    # Fase 6: Teste do novo agente e cálculo de precisão
+    log(color_text('--- Testando agente melhorado ---', 'blue'))
+    test_scores = []
+    for idx, (instance, expected) in enumerate(zip(training_data, expected_outputs), start=1):
+        try:
+            output = new_agent.run(inputs=instance)
+            eval_resp = evaluator.run(inputs={
+                'prompt': agent.get_description(),
+                'input': instance,
+                'output': output,
+            })
+            valid = validator.run(inputs={'evaluation': eval_resp}).get('result', 0)
+            test_scores.append((instance, output, valid, expected))
+            log(color_text(f"[{idx}] Resultado validado: {valid}", 'yellow'))
+        except Exception as e:
+            log(color_text(f"✖ Erro no teste da instância {idx}: {e}", 'red'))
+
+    tp = sum(1 for (_, _, valid, exp), inst in zip(test_scores, results) if exp and valid == 1)
+    fp = sum(1 for (_, _, valid, exp), inst in zip(test_scores, results) if not exp and valid == 1)
+    precision = tp / (tp + fp) if (tp + fp) else 0.0
+    print(color_text(f"Precision final: {precision:.2f}", 'bold'))
+
+    # Fase 7: Salvando resultados
+    util.write_all_text(
+        'improved_results.txt',
+        '\n\n'.join(
+            f"{i+1}. {inst}\nExpected: {exp}\nGot: {out}" for i, (inst, out, _, exp) in enumerate(test_scores)
+        )
+    )
+    util.write_all_text('config/improved_agent.yaml', final_instructions)
 
     return final_instructions
 
 
-    
+
