@@ -9,4 +9,5 @@ agent = gpt.create_agent(
 agent.json_format = "{'translation':str}"
 
 result = agent.run(inputs={'text': 'Olá, mundo!'}, temperature=0.7)
+
 print(result)
