@@ -328,8 +328,6 @@ def apply_agent_to_files(agent:GPTAgent, source_folder:str, **kwargs) -> list[di
     return results
 
 
-
-
 def improve_gpt_prompt_by_ai(
     agent: GPTAgent,
     training_data: List[dict],
@@ -350,7 +348,7 @@ def improve_gpt_prompt_by_ai(
         str: The final synthesized prompt instructions for the improved agent.
     """
 
-    # Definições de cores ANSI para realce
+    # ANSI color definitions for highlighting
     COLORS = {
         'reset': '\033[0m',
         'bold': '\033[1m',
@@ -385,8 +383,8 @@ def improve_gpt_prompt_by_ai(
             t.json_format = json_format
         return t
 
-    # Fase 1: Execução e avaliação
-    log(color_text('--- Iniciando avaliação inicial ---', 'blue'))
+    # Phase 1: Execution and evaluation
+    log(color_text('--- Starting initial evaluation ---', 'blue'))
     results = []
     total = len(training_data)
     for idx, instance in enumerate(training_data, start=1):
@@ -399,14 +397,14 @@ def improve_gpt_prompt_by_ai(
                 'output': output,
             })
             results.append((instance, output, eval_resp))
-            log(color_text('✔ Output obtido com sucesso', 'green'))
+            log(color_text('✔ Output successfully obtained', 'green'))
         except Exception as e:
-            log(color_text(f"✖ Erro na instância {idx}: {e}", 'red'))
+            log(color_text(f"✖ Error on instance {idx}: {e}", 'red'))
 
-    log(color_text('--- Avaliação inicial concluída ---', 'blue'))
+    log(color_text('--- Initial evaluation completed ---', 'blue'))
 
-    # Fase 2: Geração de instruções por instância
-    log(color_text('--- Gerando instruções de fine-tuning ---', 'blue'))
+    # Phase 2: Generating instructions per instance
+    log(color_text('--- Generating fine-tuning instructions ---', 'blue'))
     trainer = make_trainer('_trainer')
     instructions = []
     for instance, output, eval_resp in results:
@@ -417,10 +415,10 @@ def improve_gpt_prompt_by_ai(
             'human_evaluation': eval_resp,
         })
         instructions.append(instr)
-    log(color_text('✔ Instruções individuais geradas', 'green'))
+    log(color_text('✔ Individual instructions generated', 'green'))
 
-    # Fase 3: Validação binária das instruções
-    log(color_text('--- Validando instruções ---', 'blue'))
+    # Phase 3: Binary validation of instructions
+    log(color_text('--- Validating instructions ---', 'blue'))
     validator = make_trainer(
         '_trainer_binary_validator',
         max_tokens=200,
@@ -431,19 +429,19 @@ def improve_gpt_prompt_by_ai(
         validator.run(inputs={'evaluation': instr}).get('result', 0)
         for instr in instructions
     ]
-    log(color_text('✔ Validação completa', 'green'))
+    log(color_text('✔ Validation complete', 'green'))
 
-    # Fase 4: Síntese de instruções finais
-    log(color_text('--- Sintetizando instruções finais ---', 'blue'))
+    # Phase 4: Synthesis of final instructions
+    log(color_text('--- Synthesizing final instructions ---', 'blue'))
     synthesizer = make_trainer('_trainer_synthesizer')
     final_instructions = synthesizer.run(inputs={
         'agent_description': agent.get_description(),
         'training_instructions': '\n'.join(instructions),
     })
-    log(color_text('✔ Instruções finais sintetizadas', 'green'))
+    log(color_text('✔ Final instructions synthesized', 'green'))
 
-    # Fase 5: Extração de novo config JSON
-    log(color_text('--- Extraindo configuração do agente melhorado ---', 'blue'))
+    # Phase 5: Extracting new agent config JSON
+    log(color_text('--- Extracting improved agent configuration ---', 'blue'))
     extractor = make_trainer(
         '_json_extractor',
         json_format='{role: str, goal: str, backstory: str, knowledge: str}'
@@ -456,10 +454,10 @@ def improve_gpt_prompt_by_ai(
         config['backstory'],
         config['knowledge'],
     )
-    log(color_text('✔ Novo agente criado', 'green'))
+    log(color_text('✔ New agent created', 'green'))
 
-    # Fase 6: Teste do novo agente e cálculo de precisão
-    log(color_text('--- Testando agente melhorado ---', 'blue'))
+    # Phase 6: Testing new agent and calculating precision
+    log(color_text('--- Testing improved agent ---', 'blue'))
     test_scores = []
     for idx, instance in enumerate(training_data, start=1):
         try:
@@ -471,16 +469,16 @@ def improve_gpt_prompt_by_ai(
             })
             valid = validator.run(inputs={'evaluation': eval_resp}).get('result', 0)
             test_scores.append((instance, output, valid))
-            log(color_text(f"[{idx}] Resultado validado: {valid}", 'yellow'))
+            log(color_text(f"[{idx}] Validated result: {valid}", 'yellow'))
         except Exception as e:
-            log(color_text(f"✖ Erro no teste da instância {idx}: {e}", 'red'))
+            log(color_text(f"✖ Error testing instance {idx}: {e}", 'red'))
 
     tp = sum(1 for gs, ts in zip(human_scores, test_scores) if gs == 1 and ts[2] == 1)
     fp = sum(1 for gs, ts in zip(human_scores, test_scores) if gs == 0 and ts[2] == 1)
     precision = tp / (tp + fp) if (tp + fp) else 0.0
-    print(color_text(f"Precision final: {precision:.2f}", 'bold'))
+    print(color_text(f"Final precision: {precision:.2f}", 'bold'))
 
-    # Fase 7: Salvando resultados
+    # Phase 7: Saving results
     util.write_all_text(
         'improved_results.txt',
         '\n\n'.join(
@@ -511,7 +509,7 @@ def improve_gpt_prompt_by_human(
         str: The final synthesized prompt instructions for the improved agent.
     """
 
-    # Definições de cores ANSI para realce
+    # ANSI color definitions for highlighting
     COLORS = {
         'reset': '\033[0m',
         'bold': '\033[1m',
@@ -526,7 +524,7 @@ def improve_gpt_prompt_by_human(
     verbose = kwargs.get('verbose', False)
     log = print if verbose else lambda *args, **kwargs: None
 
-    # Avaliador automático (usado apenas na fase de teste)
+    # Automatic evaluator (used only in the test phase)
     evaluator = build('_trainer_evaluator')
     evaluator.gpt_model = trainer_model
     evaluator.max_tokens = default_max_tokens
@@ -547,28 +545,28 @@ def improve_gpt_prompt_by_human(
             t.json_format = json_format
         return t
 
-    # Fase 1: Execução e avaliação HUMANA via input() com comentário
-    log(color_text('--- Iniciando avaliação humana via input() ---', 'blue'))
+    # Phase 1: Execution and evaluation HUMAN via input() with comment
+    log(color_text('--- Starting human evaluation via input() ---', 'blue'))
     results = []
     total = len(training_data)
     for idx, instance in enumerate(training_data, start=1):
         log(color_text(f"[{idx}/{total}] Executando agente...", 'yellow'))
         try:
             output = agent.run(inputs=instance)
-            # Exibir instância e saída para avaliação manual
-            print(color_text(f"Instância: {instance}", 'yellow'))
-            print(color_text(f"Saída: {output}", 'yellow'))
-            # Solicitar comentário livre
-            comment = input(color_text("Comentário sobre a saída: ", 'bold'))
+            # Display instance and output for manual evaluation
+            print(color_text(f"Instance: {instance}", 'yellow'))
+            print(color_text(f"Output: {output}", 'yellow'))
+            # Request free-form comment
+            comment = input(color_text("Comment on output: ", 'bold'))
             results.append((instance, output, comment))
-            log(color_text(f"Comentário recebido: {comment}", 'green'))
+            log(color_text(f"Comment received: {comment}", 'green'))
         except Exception as e:
-            log(color_text(f"✖ Erro na instância {idx}: {e}", 'red'))
+            log(color_text(f"✖ Error on instance {idx}: {e}", 'red'))
 
-    log(color_text('--- Avaliação humana concluída ---', 'blue'))
+    log(color_text('--- Human evaluation completed ---', 'blue'))
 
-    # Fase 2: Geração de instruções por instância
-    log(color_text('--- Gerando instruções de fine-tuning ---', 'blue'))
+    # Phase 2: Generating instructions per instance
+    log(color_text('--- Generating fine-tuning instructions ---', 'blue'))
     trainer = make_trainer('_trainer')
     instructions = []
     for instance, output, human_comment in results:
@@ -579,10 +577,10 @@ def improve_gpt_prompt_by_human(
             'human_evaluation': human_comment,
         })
         instructions.append(instr)
-    log(color_text('✔ Instruções individuais geradas', 'green'))
+    log(color_text('✔ Individual instructions generated', 'green'))
 
-    # Fase 3: Validação binária das instruções
-    log(color_text('--- Validando instruções ---', 'blue'))
+    # Phase 3: Binary validation of instructions
+    log(color_text('--- Validating instructions ---', 'blue'))
     validator = make_trainer(
         '_trainer_binary_validator',
         max_tokens=200,
@@ -593,19 +591,19 @@ def improve_gpt_prompt_by_human(
         validator.run(inputs={'evaluation': instr}).get('result', 0)
         for instr in instructions
     ]
-    log(color_text('✔ Validação completa', 'green'))
+    log(color_text('✔ Validation complete', 'green'))
 
-    # Fase 4: Síntese de instruções finais
-    log(color_text('--- Sintetizando instruções finais ---', 'blue'))
+    # Phase 4: Synthesis of final instructions
+    log(color_text('--- Synthesizing final instructions ---', 'blue'))
     synthesizer = make_trainer('_trainer_synthesizer')
     final_instructions = synthesizer.run(inputs={
         'agent_description': agent.get_description(),
         'training_instructions': '\n'.join(instructions),
     })
-    log(color_text('✔ Instruções finais sintetizadas', 'green'))
+    log(color_text('✔ Final instructions synthesized', 'green'))
 
-    # Fase 5: Extração de novo config JSON
-    log(color_text('--- Extraindo configuração do agente melhorado ---', 'blue'))
+    # Phase 5: Extracting new agent config JSON
+    log(color_text('--- Extracting improved agent configuration ---', 'blue'))
     extractor = make_trainer(
         '_json_extractor',
         json_format='{role: str, goal: str, backstory: str, knowledge: str}'
@@ -618,10 +616,10 @@ def improve_gpt_prompt_by_human(
         config['backstory'],
         config['knowledge'],
     )
-    log(color_text('✔ Novo agente criado', 'green'))
+    log(color_text('✔ New agent created', 'green'))
 
-    # Fase 6: Teste do novo agente e cálculo de precisão
-    log(color_text('--- Testando agente melhorado ---', 'blue'))
+    # Phase 6: Testing new agent and calculating precision
+    log(color_text('--- Testing improved agent ---', 'blue'))
     test_scores = []
     for idx, instance in enumerate(training_data, start=1):
         try:
@@ -633,16 +631,16 @@ def improve_gpt_prompt_by_human(
             })
             valid = validator.run(inputs={'evaluation': eval_resp}).get('result', 0)
             test_scores.append((instance, output, valid))
-            log(color_text(f"[{idx}] Resultado validado: {valid}", 'yellow'))
+            log(color_text(f"[{idx}] Validated result: {valid}", 'yellow'))
         except Exception as e:
-            log(color_text(f"✖ Erro no teste da instância {idx}: {e}", 'red'))
+            log(color_text(f"✖ Error testing instance {idx}: {e}", 'red'))
 
     tp = sum(1 for gs, ts in zip(human_scores, test_scores) if gs == 1 and ts[2] == 1)
     fp = sum(1 for gs, ts in zip(human_scores, test_scores) if gs == 0 and ts[2] == 1)
     precision = tp / (tp + fp) if (tp + fp) else 0.0
-    print(color_text(f"Precision final: {precision:.2f}", 'bold'))
+    print(color_text(f"Final precision: {precision:.2f}", 'bold'))
 
-    # Fase 7: Salvando resultados
+    # Phase 7: Saving results
     util.write_all_text(
         'improved_results.txt',
         '\n\n'.join(
@@ -675,7 +673,7 @@ def improve_gpt_prompt_by_data(
         str: The final synthesized prompt instructions for the improved agent.
     """
 
-    # Definições de cores ANSI para realce
+    # ANSI color definitions for highlighting
     COLORS = {
         'reset': '\033[0m',
         'bold': '\033[1m',
@@ -690,7 +688,7 @@ def improve_gpt_prompt_by_data(
     verbose = kwargs.get('verbose', False)
     log = print if verbose else lambda *args, **kwargs: None
 
-    # Avaliador automático (usado apenas na fase de teste)
+    # Automatic evaluator (used only in the test phase)
     evaluator = build('_trainer_evaluator')
     evaluator.gpt_model = trainer_model
     evaluator.max_tokens = default_max_tokens
@@ -711,8 +709,8 @@ def improve_gpt_prompt_by_data(
             t.json_format = json_format
         return t
 
-    # Fase 1: Execução e coleta de pares (output, expected)
-    log(color_text('--- Iniciando avaliação por dados esperados ---', 'blue'))
+    # Phase 1: Execution and collection of pairs (output, expected)
+    log(color_text('--- Starting evaluation by expected data ---', 'blue'))
     results = []
     total = len(training_data)
     for idx, (instance, expected) in enumerate(zip(training_data, expected_outputs), start=1):
@@ -723,12 +721,12 @@ def improve_gpt_prompt_by_data(
             log(color_text(f"Expected: {expected}", 'yellow'))
             results.append((instance, output, expected))
         except Exception as e:
-            log(color_text(f"✖ Erro na instância {idx}: {e}", 'red'))
+            log(color_text(f"✖ Error on instance {idx}: {e}", 'red'))
 
-    log(color_text('--- Coleta de resultados concluída ---', 'blue'))
+    log(color_text('--- Results collection completed ---', 'blue'))
 
-    # Fase 2: Geração de instruções por instância
-    log(color_text('--- Gerando instruções de fine-tuning ---', 'blue'))
+    # Phase 2: Generating instructions per instance
+    log(color_text('--- Generating fine-tuning instructions ---', 'blue'))
     trainer = make_trainer('_trainer')
     instructions = []
     for instance, output, expected in results:
@@ -739,10 +737,10 @@ def improve_gpt_prompt_by_data(
             'human_evaluation': expected,
         })
         instructions.append(instr)
-    log(color_text('✔ Instruções individuais geradas', 'green'))
+    log(color_text('✔ Individual instructions generated', 'green'))
 
-    # Fase 3: Validação binária das instruções
-    log(color_text('--- Validando instruções ---', 'blue'))
+    # Phase 3: Binary validation of instructions
+    log(color_text('--- Validating instructions ---', 'blue'))
     validator = make_trainer(
         '_trainer_binary_validator',
         max_tokens=200,
@@ -753,19 +751,19 @@ def improve_gpt_prompt_by_data(
         validator.run(inputs={'evaluation': instr}).get('result', 0)
         for instr in instructions
     ]
-    log(color_text('✔ Validação completa', 'green'))
+    log(color_text('✔ Validation complete', 'green'))
 
-    # Fase 4: Síntese de instruções finais
-    log(color_text('--- Sintetizando instruções finais ---', 'blue'))
+    # Phase 4: Synthesis of final instructions
+    log(color_text('--- Synthesizing final instructions ---', 'blue'))
     synthesizer = make_trainer('_trainer_synthesizer')
     final_instructions = synthesizer.run(inputs={
         'agent_description': agent.get_description(),
         'training_instructions': '\n'.join(instructions),
     })
-    log(color_text('✔ Instruções finais sintetizadas', 'green'))
+    log(color_text('✔ Final instructions synthesized', 'green'))
 
-    # Fase 5: Extração de novo config JSON
-    log(color_text('--- Extraindo configuração do agente melhorado ---', 'blue'))
+    # Phase 5: Extracting new agent config JSON
+    log(color_text('--- Extracting improved agent configuration ---', 'blue'))
     extractor = make_trainer(
         '_json_extractor',
         json_format='{role: str, goal: str, backstory: str, knowledge: str}'
@@ -778,10 +776,10 @@ def improve_gpt_prompt_by_data(
         config['backstory'],
         config['knowledge'],
     )
-    log(color_text('✔ Novo agente criado', 'green'))
+    log(color_text('✔ New agent created', 'green'))
 
-    # Fase 6: Teste do novo agente e cálculo de precisão
-    log(color_text('--- Testando agente melhorado ---', 'blue'))
+    # Phase 6: Testing new agent and calculating precision
+    log(color_text('--- Testing improved agent ---', 'blue'))
     test_scores = []
     for idx, (instance, expected) in enumerate(zip(training_data, expected_outputs), start=1):
         try:
@@ -793,16 +791,16 @@ def improve_gpt_prompt_by_data(
             })
             valid = validator.run(inputs={'evaluation': eval_resp}).get('result', 0)
             test_scores.append((instance, output, valid, expected))
-            log(color_text(f"[{idx}] Resultado validado: {valid}", 'yellow'))
+            log(color_text(f"[{idx}] Validated result: {valid}", 'yellow'))
         except Exception as e:
-            log(color_text(f"✖ Erro no teste da instância {idx}: {e}", 'red'))
+            log(color_text(f"✖ Error testing instance {idx}: {e}", 'red'))
 
     tp = sum(1 for (_, _, valid, exp), inst in zip(test_scores, results) if exp and valid == 1)
     fp = sum(1 for (_, _, valid, exp), inst in zip(test_scores, results) if not exp and valid == 1)
     precision = tp / (tp + fp) if (tp + fp) else 0.0
-    print(color_text(f"Precision final: {precision:.2f}", 'bold'))
+    print(color_text(f"Final precision: {precision:.2f}", 'bold'))
 
-    # Fase 7: Salvando resultados
+    # Phase 7: Saving results
     util.write_all_text(
         'improved_results.txt',
         '\n\n'.join(
@@ -999,7 +997,7 @@ def ui_improve_gpt_prompt_by_human(
     Interactively improve a GPT agent’s prompt using human-in-the-loop evaluation and AI-driven synthesis,
     with optional callbacks for phase updates and per-step progress.
     """
-    # ANSI colors para realce
+    # ANSI colors for highlighting
     COLORS = {
         'reset': '\033[0m', 'bold': '\033[1m',
         'red': '\033[31m', 'green': '\033[32m',
@@ -1017,7 +1015,7 @@ def ui_improve_gpt_prompt_by_human(
         if on_step:
             on_step(idx, total)
 
-    # avaliador automático (usado na fase de teste)
+    # automatic evaluator (used in the test phase)
     evaluator = build('_trainer_evaluator')
     evaluator.gpt_model = trainer_model
     evaluator.max_tokens = default_max_tokens
@@ -1037,24 +1035,24 @@ def ui_improve_gpt_prompt_by_human(
     total = len(training_data)
     results = []
 
-    # Fase 1: avaliação humana
-    _phase("Avaliação humana via input()")
+    # Phase 1: Human evaluation
+    _phase("Human evaluation via input()")
     for idx, instance in enumerate(training_data, start=1):
         _step(idx, total)
         log(color_text(f"[{idx}/{total}] Executando agente...", 'yellow'))
         try:
             output = agent.run(inputs=instance)
-            print(color_text(f"Instância: {instance}", 'yellow'))
-            print(color_text(f"Saída: {output}", 'yellow'))
-            comment = input(color_text("Comentário sobre a saída: ", 'bold'))
+            print(color_text(f"Instance: {instance}", 'yellow'))
+            print(color_text(f"Output: {output}", 'yellow'))
+            comment = input(color_text("Comment on output: ", 'bold'))
             results.append((instance, output, comment))
-            log(color_text(f"Comentário recebido: {comment}", 'green'))
+            log(color_text(f"Comment received: {comment}", 'green'))
         except Exception as e:
-            log(color_text(f"✖ Erro na instância {idx}: {e}", 'red'))
-    _phase("Avaliação humana concluída")
+            log(color_text(f"✖ Error on instance {idx}: {e}", 'red'))
+    _phase("Human evaluation completed")
 
-    # Fase 2: geração de instruções
-    _phase("Gerando instruções de fine-tuning")
+    # Phase 2: Generating instructions
+    _phase("Generating fine-tuning instructions")
     trainer = make_trainer('_trainer')
     instructions = []
     for instance, output, human_comment in results:
@@ -1065,10 +1063,10 @@ def ui_improve_gpt_prompt_by_human(
             'human_evaluation': human_comment,
         })
         instructions.append(instr)
-    log(color_text('✔ Instruções individuais geradas', 'green'))
+    log(color_text('✔ Individual instructions generated', 'green'))
 
-    # Fase 3: validação binária
-    _phase("Validando instruções")
+    # Phase 3: Binary validation
+    _phase("Validating instructions")
     validator = make_trainer(
         '_trainer_binary_validator',
         max_tokens=200,
@@ -1079,19 +1077,19 @@ def ui_improve_gpt_prompt_by_human(
         validator.run(inputs={'evaluation': instr}).get('result', 0)
         for instr in instructions
     ]
-    log(color_text('✔ Validação completa', 'green'))
+    log(color_text('✔ Validation complete', 'green'))
 
-    # Fase 4: síntese
-    _phase("Sintetizando instruções finais")
+    # Phase 4: Synthesis
+    _phase("Synthesizing final instructions")
     synthesizer = make_trainer('_trainer_synthesizer')
     final_instructions = synthesizer.run(inputs={
         'agent_description': agent.get_description(),
         'training_instructions': '\n'.join(instructions),
     })
-    log(color_text('✔ Instruções finais sintetizadas', 'green'))
+    log(color_text('✔ Final instructions synthesized', 'green'))
 
-    # Fase 5: extração de config
-    _phase("Extraindo configuração do agente melhorado")
+    # Phase 5: Extracting config
+    _phase("Extracting improved agent configuration")
     extractor = make_trainer(
         '_json_extractor',
         json_format='{role: str, goal: str, backstory: str, knowledge: str}'
@@ -1103,10 +1101,10 @@ def ui_improve_gpt_prompt_by_human(
         config['backstory'],
         config['knowledge'],
     )
-    log(color_text('✔ Novo agente criado', 'green'))
+    log(color_text('✔ New agent created', 'green'))
 
-    # Fase 6: teste e cálculo de precisão
-    _phase("Testando agente melhorado")
+    # Phase 6: Testing and calculating precision
+    _phase("Testing improved agent")
     test_scores = []
     for idx, instance in enumerate(training_data, start=1):
         _step(idx, total)
@@ -1119,17 +1117,17 @@ def ui_improve_gpt_prompt_by_human(
             })
             valid = validator.run(inputs={'evaluation': eval_resp}).get('result', 0)
             test_scores.append((instance, output, valid))
-            log(color_text(f"[{idx}] Resultado validado: {valid}", 'yellow'))
+            log(color_text(f"[{idx}] Validated result: {valid}", 'yellow'))
         except Exception as e:
-            log(color_text(f"✖ Erro no teste da instância {idx}: {e}", 'red'))
+            log(color_text(f"✖ Error testing instance {idx}: {e}", 'red'))
 
     tp = sum(1 for gs, ts in zip(human_scores, test_scores) if gs == 1 and ts[2] == 1)
     fp = sum(1 for gs, ts in zip(human_scores, test_scores) if gs == 0 and ts[2] == 1)
     precision = tp / (tp + fp) if (tp + fp) else 0.0
-    _phase(f"Precision final: {precision:.2f}")
+    _phase(f"Final precision: {precision:.2f}")
 
-    # Fase 7: salvando resultados
-    _phase("Salvando resultados")
+    # Phase 7: Saving results
+    _phase("Saving results")
     util.write_all_text(
         'improved_results.txt',
         '\n\n'.join(
@@ -1156,7 +1154,7 @@ def ui_improve_gpt_prompt_by_data(
     Automatically improve a GPT agent’s prompt using data-driven training, evaluation, and synthesis,
     with optional callbacks for phase updates and per-step progress.
     """
-    # ANSI colors para realce
+    # ANSI colors for highlighting
     COLORS = {
         'reset': '\033[0m', 'bold': '\033[1m',
         'red': '\033[31m', 'green': '\033[32m',
@@ -1176,7 +1174,7 @@ def ui_improve_gpt_prompt_by_data(
         if on_step:
             on_step(idx, total)
 
-    # avaliador automático (usado na fase de teste)
+    # automatic evaluator (used in the test phase)
     evaluator = build('_trainer_evaluator')
     evaluator.gpt_model = trainer_model
     evaluator.max_tokens = default_max_tokens
@@ -1200,8 +1198,8 @@ def ui_improve_gpt_prompt_by_data(
     total = len(training_data)
     results = []
 
-    # Fase 1: execução e coleta de pares (output, expected)
-    _phase("Avaliação por dados esperados")
+    # Phase 1: execution and collection of pairs (output, expected)
+    _phase("Evaluation by expected data")
     for idx, (instance, expected) in enumerate(zip(training_data, expected_outputs), start=1):
         _step(idx, total)
         log(color_text(f"[{idx}/{total}] Executando agente...", 'yellow'))
@@ -1211,11 +1209,11 @@ def ui_improve_gpt_prompt_by_data(
             log(color_text(f"Expected: {expected}", 'yellow'))
             results.append((instance, output, expected))
         except Exception as e:
-            log(color_text(f"✖ Erro na instância {idx}: {e}", 'red'))
-    _phase("Coleta de resultados concluída")
+            log(color_text(f"✖ Error on instance {idx}: {e}", 'red'))
+    _phase("Results collection completed")
 
-    # Fase 2: geração de instruções por instância
-    _phase("Gerando instruções de fine-tuning")
+    # Phase 2: Generating instructions per instance
+    _phase("Generating fine-tuning instructions")
     trainer = make_trainer('_trainer')
     instructions = []
     for instance, output, expected in results:
@@ -1226,10 +1224,10 @@ def ui_improve_gpt_prompt_by_data(
             'human_evaluation': expected,
         })
         instructions.append(instr)
-    log(color_text('✔ Instruções individuais geradas', 'green'))
+    log(color_text('✔ Individual instructions generated', 'green'))
 
-    # Fase 3: validação binária das instruções
-    _phase("Validando instruções")
+    # Phase 3: Binary validation of instructions
+    _phase("Validating instructions")
     validator = make_trainer(
         '_trainer_binary_validator',
         max_tokens=200,
@@ -1240,19 +1238,19 @@ def ui_improve_gpt_prompt_by_data(
         validator.run(inputs={'evaluation': instr}).get('result', 0)
         for instr in instructions
     ]
-    log(color_text('✔ Validação completa', 'green'))
+    log(color_text('✔ Validation complete', 'green'))
 
-    # Fase 4: síntese de instruções finais
-    _phase("Sintetizando instruções finais")
+    # Phase 4: Synthesis of final instructions
+    _phase("Synthesizing final instructions")
     synthesizer = make_trainer('_trainer_synthesizer')
     final_instructions = synthesizer.run(inputs={
         'agent_description': agent.get_description(),
         'training_instructions': '\n'.join(instructions),
     })
-    log(color_text('✔ Instruções finais sintetizadas', 'green'))
+    log(color_text('✔ Final instructions synthesized', 'green'))
 
-    # Fase 5: extração de novo config JSON
-    _phase("Extraindo configuração do agente melhorado")
+    # Phase 5: extracting de new config JSON
+    _phase("Extracting improved agent configuration")
     extractor = make_trainer(
         '_json_extractor',
         json_format='{role: str, goal: str, backstory: str, knowledge: str}'
@@ -1264,10 +1262,10 @@ def ui_improve_gpt_prompt_by_data(
         config['backstory'],
         config['knowledge'],
     )
-    log(color_text('✔ Novo agente criado', 'green'))
+    log(color_text('✔ New agent created', 'green'))
 
-    # Fase 6: teste do novo agente e cálculo de precisão
-    _phase("Testando agente melhorado")
+    # Phase 6: testing new agent e precision calculation
+    _phase("Testing improved agent")
     test_scores = []
     for idx, (instance, expected) in enumerate(zip(training_data, expected_outputs), start=1):
         _step(idx, total)
@@ -1280,18 +1278,18 @@ def ui_improve_gpt_prompt_by_data(
             })
             valid = validator.run(inputs={'evaluation': eval_resp}).get('result', 0)
             test_scores.append((instance, output, valid, expected))
-            log(color_text(f"[{idx}] Resultado validado: {valid}", 'yellow'))
+            log(color_text(f"[{idx}] Validated result: {valid}", 'yellow'))
         except Exception as e:
-            log(color_text(f"✖ Erro no teste da instância {idx}: {e}", 'red'))
+            log(color_text(f"✖ Error testing instance {idx}: {e}", 'red'))
 
-    # cálculo de precisão
+    # precision calculation
     tp = sum(1 for (_, _, valid, exp) in test_scores if exp and valid == 1)
     fp = sum(1 for (_, _, valid, exp) in test_scores if not exp and valid == 1)
     precision = tp / (tp + fp) if (tp + fp) else 0.0
-    _phase(f"Precision final: {precision:.2f}")
+    _phase(f"Final precision: {precision:.2f}")
 
-    # Fase 7: salvando resultados
-    _phase("Salvando resultados")
+    # Phase 7: Saving results
+    _phase("Saving results")
     util.write_all_text(
         'improved_results.txt',
         '\n\n'.join(
@@ -1302,9 +1300,3 @@ def ui_improve_gpt_prompt_by_data(
     util.write_all_text('config/improved_agent.yaml', final_instructions)
 
     return final_instructions
-
-
-
-
-
-
