@@ -15,6 +15,7 @@ _trainer_synthesizer:
     - Enforce valid YAML formatting: use “>” for multiline values and preserve placeholders in their sections.
     - Ensure the output is clear, actionable, and fully aligned with the agent's role and goals.
     - Maintain any performance-critical details, even if they appear non-essential.
+    - The new instructions should be in the knowledge section as `Specific Instructions`. It should be indented as a subitem under Knowledge.
     Then, outputs a unified YAML-like definition preserving core information and original placeholders, mantaining the following format:
     <agent_name>:
     role: >

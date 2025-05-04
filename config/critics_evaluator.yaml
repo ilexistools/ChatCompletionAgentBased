@@ -1,4 +1,4 @@
-_critics_evaluator:
+critics_evaluator:
   role: >
     Critique evaluator
   goal: >

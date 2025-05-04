@@ -1,20 +1,14 @@
 # train_app.py
-# Streamlit app to train/improve GPT agents using the gpts library
+# Streamlit app to train/improve GPT agents using a unified ui_options dict
+# now using ui_improve_gpt_prompt_by_ai to avoid overwriting the original
 
 import os
 import yaml
 import json
 import streamlit as st
 from gpts import gpt
+# import your renamed version; adjust the path if it's in a different module
 
-# Retrieve available model constants
-model_options = [
-    gpt.GPT_4_dot_1,
-    gpt.GPT_4_dot_1_mini,
-    gpt.GPT_4_dot_1_nano,
-    gpt.GPT_4o,
-    gpt.GPT_4o_mini
-]
 
 # Ensure directory exists
 def ensure_dir(path: str):
@@ -24,112 +18,120 @@ def ensure_dir(path: str):
 
 # Page configuration
 st.set_page_config(page_title="GPT Agent Trainer", layout="wide")
-
 st.title("GPT Agent Trainer")
 
-# Training method selection
-method = st.sidebar.radio(
-    "Training Method", ["Data-driven", "AI-driven", "Human-in-the-loop"]
-)
+# session state
+if 'ui_options' not in st.session_state:
+    st.session_state['ui_options'] = {}
+ui_options = st.session_state['ui_options']
 
-# Load agent config
+# — Select agent configuration —
 config_dir = "config"
-if not os.path.isdir(config_dir):
-    st.error(f"Config directory '{config_dir}' not found.")
-    st.stop()
-configs = [f for f in os.listdir(config_dir) if f.endswith('.yaml')]
+ensure_dir(config_dir)
+configs = [f for f in os.listdir(config_dir) if f.endswith('.yaml') and not f.startswith('_')]
 if not configs:
-    st.error("No agent configuration files in config/.")
+    st.warning(f"No .yaml files found in '{config_dir}' – please add your agent configs there.")
     st.stop()
-selected_cfg = st.selectbox("Select Agent Config", configs)
-agent_name = selected_cfg.rsplit('.', 1)[0]
-config = yaml.safe_load(open(os.path.join(config_dir, selected_cfg), encoding='utf-8'))
+ui_options['agent_config'] = st.selectbox("Select Agent Config (.yaml)", configs)
+ui_options['agent_name']   = ui_options['agent_config'].rsplit('.', 1)[0]
+
+# Load and show selected config
+config_path = os.path.join(config_dir, ui_options['agent_config'])
+with open(config_path, encoding='utf-8') as f:
+    config = yaml.safe_load(f)
 st.subheader("Agent Configuration")
 st.json(config)
 
-# Common settings
-st.subheader("Trainer Settings")
-default_idx = 0
-try:
-    default_idx = model_options.index(gpt.default_model)
-except Exception:
-    pass
-trainer_model = st.selectbox("Select Trainer Model", model_options, index=default_idx)
-verbose = st.checkbox("Verbose", value=False)
+# — Agent Settings —
+st.subheader("Agent Settings")
+model_choices = [
+    gpt.GPT_4_dot_1,
+    gpt.GPT_4_dot_1_mini,
+    gpt.GPT_4_dot_1_nano,
+    gpt.GPT_4o,
+    gpt.GPT_4o_mini
+]
+default_model = getattr(gpt, 'default_model', model_choices[0])
+ui_options['model'] = st.selectbox(
+    "Select Model",
+    model_choices,
+    index=model_choices.index(default_model) if default_model in model_choices else 0
+)
+ui_options['max_tokens'] = st.number_input(
+    "Max Tokens", min_value=1, value=getattr(gpt, 'default_max_tokens', 1000)
+)
+ui_options['temperature'] = st.slider(
+    "Temperature", min_value=0.0, max_value=1.0, value=getattr(gpt, 'default_temperature', 0.2)
+)
 
-# Input uploads
-st.subheader("Training Data Upload")
-train_file = st.file_uploader("Upload training data JSONL", type=["jsonl"], key="train_data")
-expected = None
-if method == "Data-driven":
-    expect_file = st.file_uploader("Upload expected outputs JSONL", type=["jsonl"], key="expected")
-
-# Output config save
-output_dir = "trained_config"
-ensure_dir(output_dir)
-out_filename = st.text_input("Output filename", value=f"{agent_name}_improved.yaml")
-
-# Run training
-if st.button("Start Training"):
-    # Load training inputs
-    if not train_file:
-        st.error("Please upload training data file.")
-        st.stop()
-    train_lines = [l for l in train_file.read().decode('utf-8').splitlines() if l.strip()]
-    training_data = []
-    for i, line in enumerate(train_lines):
+# — Training data upload —
+st.subheader("Training Data Upload (.jsonl)")
+train_file = st.file_uploader("Upload training data JSONL", type=["jsonl"])
+if train_file:
+    text = train_file.read().decode('utf-8')
+    lines = [l for l in text.splitlines() if l.strip()]
+    ui_options['training_data'] = []
+    for i, line in enumerate(lines, start=1):
         try:
-            training_data.append(json.loads(line))
-        except Exception as e:
-            st.warning(f"Skipping invalid JSON training line {i+1}: {e}")
-    # Data-driven: load expected outputs
-    if method == "Data-driven":
-        if not expect_file:
-            st.error("Please upload expected outputs file.")
-            st.stop()
-        exp_lines = [l for l in expect_file.read().decode('utf-8').splitlines() if l.strip()]
-        expected = []
-        for i, line in enumerate(exp_lines):
-            try:
-                expected.append(json.loads(line))
-            except Exception:
-                expected.append(line.strip())
+            ui_options['training_data'].append(json.loads(line))
+        except json.JSONDecodeError:
+            st.warning(f"Skipping invalid JSON on line {i}")
 
-    # Build agent
-    agent = gpt.build(agent_name)
-    agent.gpt_model = trainer_model
-    # Invoke appropriate improvement
-    st.info(f"Running {method} training...")
-    if method == "Data-driven":
-        improved = gpt.improve_gpt_prompt_by_data(
-            agent,
-            training_data,
-            expected,
-            trainer_model=trainer_model,
-            verbose=verbose
-        )
-    elif method == "AI-driven":
-        improved = gpt.improve_gpt_prompt_by_ai(
-            agent,
-            training_data,
-            trainer_model=trainer_model,
-            verbose=verbose
-        )
+# — Trainer settings —
+st.subheader("Trainer Settings")
+default_trainer = getattr(gpt, 'default_model', model_choices[0])
+ui_options['trainer_model'] = st.selectbox(
+    "Select Trainer Model",
+    model_choices,
+    index=model_choices.index(default_trainer) if default_trainer in model_choices else 0
+)
+
+# — Run AI-driven improvement with progress UI —
+if st.button("Run AI-driven Improvement"):
+    if not ui_options.get('training_data'):
+        st.error("Please upload valid training data JSONL before running improvement.")
     else:
-        improved = gpt.improve_gpt_prompt_by_human(
-            agent,
-            training_data,
-            trainer_model=trainer_model,
-            verbose=verbose
-        )
+        # placeholders
+        phase_text    = st.empty()
+        progress_text = st.empty()
+        progress_bar  = st.progress(0)
 
-    # Display and save improved configuration
-    st.subheader("Improved Configuration")
-    st.code(improved)
-    out_path = os.path.join(output_dir, out_filename)
-    try:
-        with open(out_path, 'w', encoding='utf-8') as f:
-            f.write(improved)
-        st.success(f"Improved configuration saved to {out_path}")
-    except Exception as e:
-        st.error(f"Failed to save improved config: {e}")
+        st.info("Building agent and running AI-driven prompt improvement…")
+        agent = gpt.build(ui_options['agent_name'])
+        agent.gpt_model   = ui_options['model']
+        agent.max_tokens  = ui_options['max_tokens']
+        agent.temperature = ui_options['temperature']
+
+        # call the renamed function
+        improved_prompt = gpt.ui_improve_gpt_prompt_by_ai(
+            agent,
+            ui_options['training_data'],
+            ui_options['trainer_model'],
+            verbose=False,
+            on_phase=lambda name: phase_text.text(f"🔄 {name}…"),
+            on_step = lambda idx, total: (
+                progress_text.text(f"[{idx}/{total}] processing…"),
+                progress_bar.progress(int(idx * 100 / total))
+            )
+        )
+        ui_options['improved_prompt'] = improved_prompt
+        st.success("✅ Completed!")
+        st.subheader("Improved Agent Configuration")
+        st.code(improved_prompt)
+
+# — Save improved prompt back into config/ and rerun to reload —
+if 'improved_prompt' in ui_options:
+    ensure_dir(config_dir)
+    filename = st.text_input(
+        "Save As (filename.yaml)",
+        value=f"{ui_options['agent_name']}_improved.yaml"
+    )
+    if st.button("Save Improved Configuration", key="save_config"):
+        save_path = os.path.join(config_dir, filename)
+        try:
+            with open(save_path, 'w', encoding='utf-8') as f:
+                f.write(ui_options['improved_prompt'])
+            st.success(f"Improved configuration saved to `{save_path}`")
+            st.experimental_rerun()
+        except Exception as e:
+            st.error(f"Error saving file: {e}")
