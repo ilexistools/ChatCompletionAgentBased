@@ -1,7 +1,8 @@
 click==8.1.8
-openai==1.76.2
+openai==1.77.0
 PyPDF2==3.0.1
 python-dotenv==1.1.0
 PyYAML==6.0.1
 PyYAML==6.0.2
+streamlit==1.45.0
 tiktoken==0.7.0

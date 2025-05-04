@@ -89,7 +89,7 @@ if mode == "Design Agent":
 # --- Run Agent Batch ---
 elif mode == "Run Agent":
     st.header("Run Agent Batch")
-    configs = [f for f in os.listdir(config_dir) if f.endswith('.yaml')]
+    configs = [f for f in os.listdir(config_dir) if f.endswith('.yaml') and not f.startswith('_')]
     if not configs:
         st.info("No agent configuration files found. Please design or add configs in the 'config' folder.")
     else:
@@ -156,7 +156,7 @@ elif mode == "Run Agent":
 # --- View Existing Agents ---
 elif mode == "View Agents":
     st.header("View Existing Agents")
-    files = [f for f in os.listdir(config_dir) if f.endswith('.yaml')]
+    files = [f for f in os.listdir(config_dir) if f.endswith('.yaml') and not f.startswith('_')]
     if not files:
         st.info("No agent configuration files found.")
     else:
