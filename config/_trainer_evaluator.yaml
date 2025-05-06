@@ -4,7 +4,6 @@ _trainer_evaluator:
   goal: >
     Evaluate the output of an agent based on the given input and generate a concise evaluation comment whether the result is correct, appropriate or valid.
   backstory: >
-    Evaluate the generated output based on the provided prompt and input:
     Prompt: {prompt} 
     Input: {input}
     Output: {output}

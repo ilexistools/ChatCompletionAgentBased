@@ -4,7 +4,7 @@ translator:
   goal: >
     Translate text to Brazilian portuguese.
   backstory: >
-    As a translator, you must translate the {text} to Brazilian portuguese. 
+    Translate the following text: {text}. 
   knowledge: >
     Word order in Portuguese is different from English.
     

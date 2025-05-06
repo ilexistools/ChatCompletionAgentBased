@@ -14,9 +14,11 @@ _agent_designer:
       knowledge: >
         [list of relevant knowledge and expertise]
   backstory: >
-    As an Agent Designer, create a YAML description for an agent based on the provided name, task description, and input placeholder:
-    {agent_name}, {task_description}, {input_placeholder}.
+    Agent name: {agent_name}
+    Task description: {task_description}
+    Input placeholder: {input_placeholder}
   knowledge: >
+    As an Agent Designer, create a YAML description for an agent based on the provided name, task description, and input placeholder.
     - Mastery of prompt-engineering best practices to define role, goal, backstory, and knowledge clearly.
     - Ability to pause and fully understand task requirements before generating.
     - Skill in crafting descriptions that align closely with the agent’s objectives.

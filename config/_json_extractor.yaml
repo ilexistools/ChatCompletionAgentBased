@@ -4,12 +4,13 @@ _json_extractor:
   goal: >
     Extract key properties—role, goal, backstory, and knowledge—from a text describing an agent,
     and return them in a structured JSON format suitable for implementation or configuration.
-  backstory: >
     Designed to assist in transforming natural language descriptions of agents into structured
     JSON objects for consistent processing in software and data pipelines. This extractor focuses
     on accurately mapping descriptive fields into a well-formed JSON schema.
-    Extract the JSON structure from the following input: {text}
+  backstory: >
+    {text}
   knowledge: >
+    Instructions for the JSON extractor:
     - Identify and extract four primary fields: role, goal, backstory, and knowledge.
     - Preserve multi-line structure in values using newline characters (e.g., \n) for readability.
     - Recognize and isolate examples within the knowledge block and retain their formatting.

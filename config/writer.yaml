@@ -4,9 +4,9 @@ writer:
   goal: >
     Write horoscopes for a given sign of the zodiac.
   backstory: >
-    As a horoscope writer, you must write a horoscope for the {sign}. 
-    Use the knowledge base as a reference.
+    {sign}. 
   knowledge: >
+    Use the knowledge base as a reference:
     Macro Structure of Horoscopes
     Introduction
     Brief overview of the day's (or week's, month's, year's) astrological influences.

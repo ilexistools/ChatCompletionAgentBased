@@ -95,16 +95,27 @@ class GPTAgent:
         # determine system role
         sys_role = "assistant" if self.gpt_model in ["o1","o1-mini","o3-mini"] else "system"
 
-        # assemble messages
-        self.clear_messages()
-        for part in ("role", "goal", "knowledge", "json_format"):
-            text = locals().get(part)
+        #  get message parts 
+        system_parts = []
+        for part in ("role", "goal", "knowledge"):
+            text = locals().get(part)   
             if text:
-                self.add_message(sys_role, f"{part.capitalize()}: {text}")
-        self.add_message("user", backstory)
+                system_parts.append(text)
+        # clear messages     
+        self.clear_messages()
+        # assemble 
+        if self.json_format:
+            json_part = "Always return response as JSON, without comments. JSON format: {self.json_format}"
+            self.add_message(sys_role, "\n".join( [system_parts[0].strip(), system_parts[1].strip(), json_part, system_parts[2].strip()]) )    
+            self.add_message("user", backstory)
+        else:
+            self.add_message(sys_role, "\n".join( [system_parts[0].strip(), system_parts[1].strip(), system_parts[2].strip()]) )    
+            self.add_message("user", backstory)
 
         if self.verbose:
-            logger.debug("Messages to send: %s", self.messages)
+            print("\nPrompt:\n")
+            for message in self.messages:
+                print(f"{message['content']}")
 
         # API call w/ simple retry
         for attempt in range(3):
@@ -118,6 +129,9 @@ class GPTAgent:
                     response_format={"type":"json_object"} if self.json_format else None
                 )
                 content = resp.choices[0].message.content
+                if self.verbose:
+                    print("\nResponse:\n")
+                    print(f"{content}\n")
                 return json.loads(content) if self.json_format else content
             except Exception as e:
                 logger.error("API error (attempt %d): %s", attempt+1, e)

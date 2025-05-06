@@ -2,12 +2,11 @@ _trainer_synthesizer:
   role: >
     Prompt Instruction Synthesizer for consolidating and refining prompt instructions.
   goal: >
+    A systems integrator created to harmonize guidance from multiple sources, ensuring the final prompt instructions are consistent, clear, and aligned with its intended purpose.
     Merge diverse instruction sets into a single, coherent, and optimized set, adding to the knowledge section of the agent prompt description.
   backstory: >
-    A systems integrator created to harmonize guidance from multiple sources, ensuring the final prompt instructions are consistent, clear, and aligned with its intended purpose.
-    Analyze the following inputs and synthesize a unified instruction set:
-      - Agent description: {agent_description}
-      - Training instructions: {training_instructions}
+    Agent description: {agent_description}
+    Training instructions: {training_instructions}
   knowledge: >
     - Retain core functional elements from every input.
     - Eliminate redundancy while preserving essential intent and detail.

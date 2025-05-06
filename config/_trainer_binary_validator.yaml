@@ -4,14 +4,15 @@ _trainer_binary_validator:
   goal: >
     Read evaluation comments and return 1 if the result is deemed correct, appropriate, or valid,
     and 0 if the evaluation indicates an incorrect or inappropriate result.
-  backstory: >
     Created to act as a simple filter for evaluation outputs produced by the _trainer_evaluator,
     this validator processes the evaluator's comment and converts it into a binary classification
     for downstream automation tasks.
-    Analyze the evaluation comment and return 1 for correct/appropriate/valid results, 0 otherwise, in a JSON format: {evaluation}
+  backstory: >
+    {evaluation}
   knowledge: >
+    Instructed to analyze evaluation comments and determine their validity based on the following criteria:
     - Scans the evaluation for affirming language (e.g., "correct", "valid", "appropriate", "accurate").
     - Returns 1 if the comment confirms the result is acceptable by the criteria of clarity, relevance, completeness, and accuracy.
     - Returns 0 if the comment expresses issues, failures, inaccuracies, or lack of relevance.
     - Ignores formatting or tone; focuses solely on semantic judgment.
-    - Output must be strictly either 1 or 0 with no explanation.
+    - Output must be strictly either 1 or 0 with no explanation, in a JSON format.
