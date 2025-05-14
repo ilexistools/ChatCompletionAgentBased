@@ -6,6 +6,17 @@ from typing import List
 import gpts.util as util 
 import logging
 from typing import Any, Callable, Dict, List, Optional, Tuple
+from pydantic import BaseModel
+
+
+class ResultSchema(BaseModel):
+    result: int
+
+class AgentConfigSchema(BaseModel):
+    role: str
+    goal: str
+    backstory: str
+    knowledge: str
 
 # OpenAI models
 GPT_4_dot_1='gpt-4.1'
@@ -29,7 +40,7 @@ def ask(prompt:str,**kwargs) -> any:
             model (str): Identifier of the GPT model to use (default is default_model).
             max_tokens (int): Maximum number of tokens for the response (default is default_max_tokens).
             temperature (float): Sampling temperature for response generation (default is default_temperature).
-            json_format (Any): Optional format for JSON output.
+            output_schema (Any): Optional format for structured output.
             role (str): Role name for the assistant (default is 'Assistant').
             goal (str): Instruction or goal guiding the assistant (default is 'You are a helpful assistant.').
             knowledge (str): Additional context or knowledge to supply to the assistant.
@@ -39,7 +50,7 @@ def ask(prompt:str,**kwargs) -> any:
     model = kwargs.get('model', default_model)
     max_tokens = kwargs.get('max_tokens', default_max_tokens)
     temperature = kwargs.get('temperature', default_temperature)
-    json_format = kwargs.get('json_format', None)
+    output_schema = kwargs.get('output_schema', None)
     role = kwargs.get('role', 'Assistant')
     goal = kwargs.get('goal', 'You are a helpful assistant.')
     knowledge = kwargs.get('knowledge', '')
@@ -48,7 +59,7 @@ def ask(prompt:str,**kwargs) -> any:
     assistant.gpt_model = model
     assistant.max_tokens = max_tokens 
     assistant.temperature = temperature
-    assistant.json_format = json_format
+    assistant.output_schema = output_schema
     result = assistant.run(inputs={'role': role, 'goal': goal, 'prompt': prompt, 'knowledge': knowledge})
     return result
 
@@ -149,7 +160,7 @@ def create_agent(role: str, goal: str, backstory: str, knowledge: str, **kwargs)
             model (str): Identifier of the GPT model to use (default is default_model).
             max_tokens (int): Maximum number of tokens for the agent's responses (default is default_max_tokens).
             temperature (float): Sampling temperature for response generation (default is default_temperature).
-            json_format (Any): Optional format specification for JSON output.
+            output_schema (Any): Optional format specification for structured output.
 
     Returns:
         GPTAgent: A configured GPTAgent instance.
@@ -157,7 +168,7 @@ def create_agent(role: str, goal: str, backstory: str, knowledge: str, **kwargs)
     model = kwargs.get('model', default_model)
     max_tokens = kwargs.get('max_tokens', default_max_tokens)
     temperature = kwargs.get('temperature', default_temperature)
-    json_format = kwargs.get('json_format', None)
+    output_schema = kwargs.get('output_schema', None)
     gpt = GPTAgent()
     gpt.role = role
     gpt.goal = goal 
@@ -166,7 +177,7 @@ def create_agent(role: str, goal: str, backstory: str, knowledge: str, **kwargs)
     gpt.gpt_model = model 
     gpt.max_tokens = max_tokens
     gpt.temperature = temperature
-    gpt.json_format = json_format
+    gpt.output_schema = output_schema
     return gpt 
 
 def count_tokens(text: str, model: str = default_model) -> int:
@@ -336,19 +347,7 @@ def improve_gpt_prompt_by_ai(
 ) -> str:
     """
     Automatically improve a GPT agent’s prompt via AI-driven training, evaluation, and synthesis.
-
-    Parameters:
-        agent (GPTAgent): The initial agent whose prompt and configuration will be optimized.
-        training_data (List[dict]): A collection of input instances and expected outputs for training.
-        trainer_model (str): Identifier of the GPT model to use for training and evaluation (default is default_model).
-        **kwargs:
-            verbose (bool): If True, prints colorized progress and debug messages to the console.
-
-    Returns:
-        str: The final synthesized prompt instructions for the improved agent.
     """
-
-    # ANSI color definitions for highlighting
     COLORS = {
         'reset': '\033[0m',
         'bold': '\033[1m',
@@ -372,18 +371,17 @@ def improve_gpt_prompt_by_ai(
         name: str,
         max_tokens: int = default_max_tokens,
         temperature: float = None,
-        json_format: str = None,
+        output_schema: Optional[Type[BaseModel]] = None,
     ):
         t = factory.build(name)
         t.gpt_model = trainer_model
         t.max_tokens = max_tokens
         if temperature is not None:
             t.temperature = temperature
-        if json_format is not None:
-            t.json_format = json_format
+        if output_schema is not None:
+            t.output_schema = output_schema
         return t
 
-    # Phase 1: Execution and evaluation
     log(color_text('--- Starting initial evaluation ---', 'blue'))
     results = []
     total = len(training_data)
@@ -403,7 +401,6 @@ def improve_gpt_prompt_by_ai(
 
     log(color_text('--- Initial evaluation completed ---', 'blue'))
 
-    # Phase 2: Generating instructions per instance
     log(color_text('--- Generating fine-tuning instructions ---', 'blue'))
     trainer = make_trainer('_trainer')
     instructions = []
@@ -417,21 +414,19 @@ def improve_gpt_prompt_by_ai(
         instructions.append(instr)
     log(color_text('✔ Individual instructions generated', 'green'))
 
-    # Phase 3: Binary validation of instructions
     log(color_text('--- Validating instructions ---', 'blue'))
     validator = make_trainer(
         '_trainer_binary_validator',
         max_tokens=200,
         temperature=0.2,
-        json_format='{result: int}'
+        output_schema=ResultSchema
     )
     human_scores = [
-        validator.run(inputs={'evaluation': instr}).get('result', 0)
+        validator.run(inputs={'evaluation': instr}).result
         for instr in instructions
     ]
     log(color_text('✔ Validation complete', 'green'))
 
-    # Phase 4: Synthesis of final instructions
     log(color_text('--- Synthesizing final instructions ---', 'blue'))
     synthesizer = make_trainer('_trainer_synthesizer')
     final_instructions = synthesizer.run(inputs={
@@ -440,23 +435,21 @@ def improve_gpt_prompt_by_ai(
     })
     log(color_text('✔ Final instructions synthesized', 'green'))
 
-    # Phase 5: Extracting new agent config JSON
     log(color_text('--- Extracting improved agent configuration ---', 'blue'))
     extractor = make_trainer(
         '_json_extractor',
-        json_format='{role: str, goal: str, backstory: str, knowledge: str}'
+        output_schema=AgentConfigSchema
     )
     config = extractor.run(inputs={'text': final_instructions})
 
     new_agent = create_agent(
-        config['role'],
-        config['goal'],
-        config['backstory'],
-        config['knowledge'],
+        config.role,
+        config.goal,
+        config.backstory,
+        config.knowledge,
     )
     log(color_text('✔ New agent created', 'green'))
 
-    # Phase 6: Testing new agent and calculating precision
     log(color_text('--- Testing improved agent ---', 'blue'))
     test_scores = []
     for idx, instance in enumerate(training_data, start=1):
@@ -467,7 +460,7 @@ def improve_gpt_prompt_by_ai(
                 'input': instance,
                 'output': output,
             })
-            valid = validator.run(inputs={'evaluation': eval_resp}).get('result', 0)
+            valid = validator.run(inputs={'evaluation': eval_resp}).result
             test_scores.append((instance, output, valid))
             log(color_text(f"[{idx}] Validated result: {valid}", 'yellow'))
         except Exception as e:
@@ -478,7 +471,6 @@ def improve_gpt_prompt_by_ai(
     precision = tp / (tp + fp) if (tp + fp) else 0.0
     print(color_text(f"Final precision: {precision:.2f}", 'bold'))
 
-    # Phase 7: Saving results
     util.write_all_text(
         'improved_results.txt',
         '\n\n'.join(
@@ -489,6 +481,7 @@ def improve_gpt_prompt_by_ai(
 
     return final_instructions
 
+
 def improve_gpt_prompt_by_human(
     agent: GPTAgent,
     training_data: List[dict],
@@ -497,19 +490,7 @@ def improve_gpt_prompt_by_human(
 ) -> str:
     """
     Interactively improve a GPT agent’s prompt using human-in-the-loop evaluation and AI-driven synthesis.
-
-    Parameters:
-        agent (GPTAgent): The initial agent whose prompt and configuration will be optimized.
-        training_data (List[dict]): A collection of input instances and their outputs for human review.
-        trainer_model (str): Identifier of the GPT model to use for instruction generation and validation (default is default_model).
-        **kwargs:
-            verbose (bool): If True, prints colorized progress and debug messages to the console.
-
-    Returns:
-        str: The final synthesized prompt instructions for the improved agent.
     """
-
-    # ANSI color definitions for highlighting
     COLORS = {
         'reset': '\033[0m',
         'bold': '\033[1m',
@@ -518,34 +499,34 @@ def improve_gpt_prompt_by_human(
         'yellow': '\033[33m',
         'blue': '\033[34m',
     }
+
     def color_text(text: str, color: str = 'reset') -> str:
         return f"{COLORS.get(color, COLORS['reset'])}{text}{COLORS['reset']}"
 
     verbose = kwargs.get('verbose', False)
     log = print if verbose else lambda *args, **kwargs: None
 
-    # Automatic evaluator (used only in the test phase)
     evaluator = build('_trainer_evaluator')
     evaluator.gpt_model = trainer_model
     evaluator.max_tokens = default_max_tokens
 
     factory = GPTFactory()
+
     def make_trainer(
         name: str,
         max_tokens: int = default_max_tokens,
         temperature: float = None,
-        json_format: str = None,
+        output_schema: Optional[Type[BaseModel]] = None,
     ):
         t = factory.build(name)
         t.gpt_model = trainer_model
         t.max_tokens = max_tokens
         if temperature is not None:
             t.temperature = temperature
-        if json_format is not None:
-            t.json_format = json_format
+        if output_schema is not None:
+            t.output_schema = output_schema
         return t
 
-    # Phase 1: Execution and evaluation HUMAN via input() with comment
     log(color_text('--- Starting human evaluation via input() ---', 'blue'))
     results = []
     total = len(training_data)
@@ -553,10 +534,8 @@ def improve_gpt_prompt_by_human(
         log(color_text(f"[{idx}/{total}] Executando agente...", 'yellow'))
         try:
             output = agent.run(inputs=instance)
-            # Display instance and output for manual evaluation
             print(color_text(f"Instance: {instance}", 'yellow'))
             print(color_text(f"Output: {output}", 'yellow'))
-            # Request free-form comment
             comment = input(color_text("Comment on output: ", 'bold'))
             results.append((instance, output, comment))
             log(color_text(f"Comment received: {comment}", 'green'))
@@ -565,7 +544,6 @@ def improve_gpt_prompt_by_human(
 
     log(color_text('--- Human evaluation completed ---', 'blue'))
 
-    # Phase 2: Generating instructions per instance
     log(color_text('--- Generating fine-tuning instructions ---', 'blue'))
     trainer = make_trainer('_trainer')
     instructions = []
@@ -579,21 +557,19 @@ def improve_gpt_prompt_by_human(
         instructions.append(instr)
     log(color_text('✔ Individual instructions generated', 'green'))
 
-    # Phase 3: Binary validation of instructions
     log(color_text('--- Validating instructions ---', 'blue'))
     validator = make_trainer(
         '_trainer_binary_validator',
         max_tokens=200,
         temperature=0.2,
-        json_format='{result: int}'
+        output_schema=ResultSchema
     )
     human_scores = [
-        validator.run(inputs={'evaluation': instr}).get('result', 0)
+        validator.run(inputs={'evaluation': instr}).result
         for instr in instructions
     ]
     log(color_text('✔ Validation complete', 'green'))
 
-    # Phase 4: Synthesis of final instructions
     log(color_text('--- Synthesizing final instructions ---', 'blue'))
     synthesizer = make_trainer('_trainer_synthesizer')
     final_instructions = synthesizer.run(inputs={
@@ -602,23 +578,21 @@ def improve_gpt_prompt_by_human(
     })
     log(color_text('✔ Final instructions synthesized', 'green'))
 
-    # Phase 5: Extracting new agent config JSON
     log(color_text('--- Extracting improved agent configuration ---', 'blue'))
     extractor = make_trainer(
         '_json_extractor',
-        json_format='{role: str, goal: str, backstory: str, knowledge: str}'
+        output_schema=AgentConfigSchema
     )
     config = extractor.run(inputs={'text': final_instructions})
 
     new_agent = create_agent(
-        config['role'],
-        config['goal'],
-        config['backstory'],
-        config['knowledge'],
+        config.role,
+        config.goal,
+        config.backstory,
+        config.knowledge,
     )
     log(color_text('✔ New agent created', 'green'))
 
-    # Phase 6: Testing new agent and calculating precision
     log(color_text('--- Testing improved agent ---', 'blue'))
     test_scores = []
     for idx, instance in enumerate(training_data, start=1):
@@ -629,7 +603,7 @@ def improve_gpt_prompt_by_human(
                 'input': instance,
                 'output': output,
             })
-            valid = validator.run(inputs={'evaluation': eval_resp}).get('result', 0)
+            valid = validator.run(inputs={'evaluation': eval_resp}).result
             test_scores.append((instance, output, valid))
             log(color_text(f"[{idx}] Validated result: {valid}", 'yellow'))
         except Exception as e:
@@ -640,7 +614,6 @@ def improve_gpt_prompt_by_human(
     precision = tp / (tp + fp) if (tp + fp) else 0.0
     print(color_text(f"Final precision: {precision:.2f}", 'bold'))
 
-    # Phase 7: Saving results
     util.write_all_text(
         'improved_results.txt',
         '\n\n'.join(
@@ -651,6 +624,7 @@ def improve_gpt_prompt_by_human(
 
     return final_instructions
 
+
 def improve_gpt_prompt_by_data(
     agent: GPTAgent,
     training_data: List[dict],
@@ -660,20 +634,7 @@ def improve_gpt_prompt_by_data(
 ) -> str:
     """
     Automatically improve a GPT agent’s prompt using data-driven training, evaluation, and synthesis.
-
-    Parameters:
-        agent (GPTAgent): The initial agent whose prompt and configuration will be optimized.
-        training_data (List[dict]): A collection of input instances to feed the agent.
-        expected_outputs (List[str]): The corresponding expected outputs for each training instance.
-        trainer_model (str): Identifier of the GPT model to use for training and evaluation (default is default_model).
-        **kwargs:
-            verbose (bool): If True, prints colorized progress and debug messages to the console.
-
-    Returns:
-        str: The final synthesized prompt instructions for the improved agent.
     """
-
-    # ANSI color definitions for highlighting
     COLORS = {
         'reset': '\033[0m',
         'bold': '\033[1m',
@@ -682,34 +643,35 @@ def improve_gpt_prompt_by_data(
         'yellow': '\033[33m',
         'blue': '\033[34m',
     }
+
     def color_text(text: str, color: str = 'reset') -> str:
         return f"{COLORS.get(color, COLORS['reset'])}{text}{COLORS['reset']}"
 
     verbose = kwargs.get('verbose', False)
     log = print if verbose else lambda *args, **kwargs: None
 
-    # Automatic evaluator (used only in the test phase)
     evaluator = build('_trainer_evaluator')
     evaluator.gpt_model = trainer_model
     evaluator.max_tokens = default_max_tokens
 
     factory = GPTFactory()
+
     def make_trainer(
         name: str,
         max_tokens: int = default_max_tokens,
         temperature: float = None,
-        json_format: str = None,
+        output_schema: Optional[Type[BaseModel]] = None,
     ):
         t = factory.build(name)
         t.gpt_model = trainer_model
         t.max_tokens = max_tokens
         if temperature is not None:
             t.temperature = temperature
-        if json_format is not None:
-            t.json_format = json_format
+        if output_schema is not None:
+            t.output_schema = output_schema
         return t
 
-    # Phase 1: Execution and collection of pairs (output, expected)
+    # Phase 1: Execution and collection
     log(color_text('--- Starting evaluation by expected data ---', 'blue'))
     results = []
     total = len(training_data)
@@ -725,7 +687,7 @@ def improve_gpt_prompt_by_data(
 
     log(color_text('--- Results collection completed ---', 'blue'))
 
-    # Phase 2: Generating instructions per instance
+    # Phase 2: Fine-tuning instructions
     log(color_text('--- Generating fine-tuning instructions ---', 'blue'))
     trainer = make_trainer('_trainer')
     instructions = []
@@ -739,21 +701,21 @@ def improve_gpt_prompt_by_data(
         instructions.append(instr)
     log(color_text('✔ Individual instructions generated', 'green'))
 
-    # Phase 3: Binary validation of instructions
+    # Phase 3: Binary validation
     log(color_text('--- Validating instructions ---', 'blue'))
     validator = make_trainer(
         '_trainer_binary_validator',
         max_tokens=200,
         temperature=0.2,
-        json_format='{result: int}'
+        output_schema=ResultSchema
     )
     instr_scores = [
-        validator.run(inputs={'evaluation': instr}).get('result', 0)
+        validator.run(inputs={'evaluation': instr}).result
         for instr in instructions
     ]
     log(color_text('✔ Validation complete', 'green'))
 
-    # Phase 4: Synthesis of final instructions
+    # Phase 4: Synthesis
     log(color_text('--- Synthesizing final instructions ---', 'blue'))
     synthesizer = make_trainer('_trainer_synthesizer')
     final_instructions = synthesizer.run(inputs={
@@ -762,23 +724,23 @@ def improve_gpt_prompt_by_data(
     })
     log(color_text('✔ Final instructions synthesized', 'green'))
 
-    # Phase 5: Extracting new agent config JSON
+    # Phase 5: Extracting new config
     log(color_text('--- Extracting improved agent configuration ---', 'blue'))
     extractor = make_trainer(
         '_json_extractor',
-        json_format='{role: str, goal: str, backstory: str, knowledge: str}'
+        output_schema=AgentConfigSchema
     )
     config = extractor.run(inputs={'text': final_instructions})
 
     new_agent = create_agent(
-        config['role'],
-        config['goal'],
-        config['backstory'],
-        config['knowledge'],
+        config.role,
+        config.goal,
+        config.backstory,
+        config.knowledge,
     )
     log(color_text('✔ New agent created', 'green'))
 
-    # Phase 6: Testing new agent and calculating precision
+    # Phase 6: Testing improved agent
     log(color_text('--- Testing improved agent ---', 'blue'))
     test_scores = []
     for idx, (instance, expected) in enumerate(zip(training_data, expected_outputs), start=1):
@@ -789,14 +751,14 @@ def improve_gpt_prompt_by_data(
                 'input': instance,
                 'output': output,
             })
-            valid = validator.run(inputs={'evaluation': eval_resp}).get('result', 0)
+            valid = validator.run(inputs={'evaluation': eval_resp}).result
             test_scores.append((instance, output, valid, expected))
             log(color_text(f"[{idx}] Validated result: {valid}", 'yellow'))
         except Exception as e:
             log(color_text(f"✖ Error testing instance {idx}: {e}", 'red'))
 
-    tp = sum(1 for (_, _, valid, exp), inst in zip(test_scores, results) if exp and valid == 1)
-    fp = sum(1 for (_, _, valid, exp), inst in zip(test_scores, results) if not exp and valid == 1)
+    tp = sum(1 for (_, _, valid, exp), _ in zip(test_scores, results) if exp and valid == 1)
+    fp = sum(1 for (_, _, valid, exp), _ in zip(test_scores, results) if not exp and valid == 1)
     precision = tp / (tp + fp) if (tp + fp) else 0.0
     print(color_text(f"Final precision: {precision:.2f}", 'bold'))
 
@@ -811,6 +773,9 @@ def improve_gpt_prompt_by_data(
 
     return final_instructions
 
+
+from typing import Callable, List, Optional, Type
+
 def ui_improve_gpt_prompt_by_ai(
     agent: GPTAgent,
     training_data: List[dict],
@@ -824,50 +789,37 @@ def ui_improve_gpt_prompt_by_ai(
     """
     Automatically improve a GPT agent’s prompt via AI-driven training, evaluation, and synthesis,
     with optional callbacks for phase updates and per-step progress.
-
-    Parameters:
-        agent (GPTAgent): The initial agent to optimize.
-        training_data (List[dict]): Input instances + expected outputs.
-        trainer_model (str): GPT model to use for training/evaluation.
-        verbose (bool): If True, prints ANSI-colored logs to console.
-        on_phase (callable): Called as on_phase(phase_name) at start of each phase.
-        on_step  (callable): Called as on_step(idx, total) each loop in phase 1.
-        **kwargs: Ignored.
-    Returns:
-        str: The final synthesized prompt instructions.
     """
-
-    # ANSI colors for console (used if verbose=True)
     COLORS = {
         'reset': '\033[0m', 'bold': '\033[1m',
         'red': '\033[31m', 'green': '\033[32m',
         'yellow': '\033[33m', 'blue': '\033[34m',
     }
+
     def color_text(text: str, color: str = 'reset') -> str:
         return f"{COLORS.get(color, COLORS['reset'])}{text}{COLORS['reset']}"
 
     log = print if verbose else lambda *a, **k: None
 
-    # Build evaluator
     evaluator = build('_trainer_evaluator')
     evaluator.gpt_model = trainer_model
     evaluator.max_tokens = default_max_tokens
 
-    # Factory for trainers
     factory = GPTFactory()
+
     def make_trainer(
         name: str,
         max_tokens: int = default_max_tokens,
         temperature: float = None,
-        json_format: str = None,
+        output_schema: Optional[Type[BaseModel]] = None,
     ):
         t = factory.build(name)
         t.gpt_model = trainer_model
         t.max_tokens = max_tokens
         if temperature is not None:
             t.temperature = temperature
-        if json_format is not None:
-            t.json_format = json_format
+        if output_schema is not None:
+            t.output_schema = output_schema
         return t
 
     total = len(training_data)
@@ -894,9 +846,7 @@ def ui_improve_gpt_prompt_by_ai(
     if on_phase: on_phase("Generating fine-tuning instructions")
     trainer = make_trainer('_trainer')
     instructions = []
-    i = 0
-    for instance, output, eval_resp in results:
-        i += 1
+    for i, (instance, output, eval_resp) in enumerate(results, start=1):
         instr = trainer.run(inputs={
             'agent_description': agent.get_description(),
             'instance_data': instance,
@@ -913,10 +863,10 @@ def ui_improve_gpt_prompt_by_ai(
         '_trainer_binary_validator',
         max_tokens=200,
         temperature=0.2,
-        json_format='{result: int}'
+        output_schema=ResultSchema
     )
     human_scores = [
-        validator.run(inputs={'evaluation': instr}).get('result', 0)
+        validator.run(inputs={'evaluation': instr}).result
         for instr in instructions
     ]
     log(color_text("✔ Validation complete", 'green'))
@@ -934,14 +884,14 @@ def ui_improve_gpt_prompt_by_ai(
     if on_phase: on_phase("Extracting final configuration")
     extractor = make_trainer(
         '_json_extractor',
-        json_format='{role: str, goal: str, backstory: str, knowledge: str}'
+        output_schema=AgentConfigSchema
     )
     config = extractor.run(inputs={'text': final_instructions})
     new_agent = create_agent(
-        config['role'],
-        config['goal'],
-        config['backstory'],
-        config['knowledge'],
+        config.role,
+        config.goal,
+        config.backstory,
+        config.knowledge,
     )
     log(color_text("✔ New agent created", 'green'))
 
@@ -957,7 +907,7 @@ def ui_improve_gpt_prompt_by_ai(
                 'input': instance,
                 'output': output,
             })
-            valid = validator.run(inputs={'evaluation': eval_resp}).get('result', 0)
+            valid = validator.run(inputs={'evaluation': eval_resp}).result
             test_scores.append((instance, output, valid))
             log(color_text(f"[{idx}] Validated result: {valid}", 'yellow'))
         except Exception as e:
@@ -979,9 +929,8 @@ def ui_improve_gpt_prompt_by_ai(
     )
     util.write_all_text('config/improved_agent.yaml', final_instructions)
 
-    if on_phase: on_phase(f"Final precision: {precision:.2f}")
-
     return final_instructions
+
 
 def ui_improve_gpt_prompt_by_human(
     agent: GPTAgent,
@@ -997,39 +946,41 @@ def ui_improve_gpt_prompt_by_human(
     Interactively improve a GPT agent’s prompt using human-in-the-loop evaluation and AI-driven synthesis,
     with optional callbacks for phase updates and per-step progress.
     """
-    # ANSI colors for highlighting
     COLORS = {
         'reset': '\033[0m', 'bold': '\033[1m',
         'red': '\033[31m', 'green': '\033[32m',
         'yellow': '\033[33m', 'blue': '\033[34m',
     }
+
     def color_text(text: str, color: str = 'reset') -> str:
         return f"{COLORS.get(color, COLORS['reset'])}{text}{COLORS['reset']}"
 
     log = print if verbose else lambda *a, **k: None
+
     def _phase(name: str):
         if on_phase:
             on_phase(name)
         log(color_text(f"--- {name} ---", 'blue'))
+
     def _step(idx: int, total: int):
         if on_step:
             on_step(idx, total)
 
-    # automatic evaluator (used in the test phase)
     evaluator = build('_trainer_evaluator')
     evaluator.gpt_model = trainer_model
     evaluator.max_tokens = default_max_tokens
 
     factory = GPTFactory()
+
     def make_trainer(name: str, max_tokens: int = default_max_tokens,
-                     temperature: float = None, json_format: str = None):
+                     temperature: float = None, output_schema: Optional[Type[BaseModel]] = None):
         t = factory.build(name)
         t.gpt_model = trainer_model
         t.max_tokens = max_tokens
         if temperature is not None:
             t.temperature = temperature
-        if json_format is not None:
-            t.json_format = json_format
+        if output_schema is not None:
+            t.output_schema = output_schema
         return t
 
     total = len(training_data)
@@ -1071,10 +1022,10 @@ def ui_improve_gpt_prompt_by_human(
         '_trainer_binary_validator',
         max_tokens=200,
         temperature=0.2,
-        json_format='{result: int}'
+        output_schema=ResultSchema
     )
     human_scores = [
-        validator.run(inputs={'evaluation': instr}).get('result', 0)
+        validator.run(inputs={'evaluation': instr}).result
         for instr in instructions
     ]
     log(color_text('✔ Validation complete', 'green'))
@@ -1092,14 +1043,14 @@ def ui_improve_gpt_prompt_by_human(
     _phase("Extracting improved agent configuration")
     extractor = make_trainer(
         '_json_extractor',
-        json_format='{role: str, goal: str, backstory: str, knowledge: str}'
+        output_schema=AgentConfigSchema
     )
     config = extractor.run(inputs={'text': final_instructions})
     new_agent = create_agent(
-        config['role'],
-        config['goal'],
-        config['backstory'],
-        config['knowledge'],
+        config.role,
+        config.goal,
+        config.backstory,
+        config.knowledge,
     )
     log(color_text('✔ New agent created', 'green'))
 
@@ -1115,7 +1066,7 @@ def ui_improve_gpt_prompt_by_human(
                 'input': instance,
                 'output': output,
             })
-            valid = validator.run(inputs={'evaluation': eval_resp}).get('result', 0)
+            valid = validator.run(inputs={'evaluation': eval_resp}).result
             test_scores.append((instance, output, valid))
             log(color_text(f"[{idx}] Validated result: {valid}", 'yellow'))
         except Exception as e:
@@ -1139,6 +1090,9 @@ def ui_improve_gpt_prompt_by_human(
 
     return final_instructions
 
+
+from typing import Callable, List, Optional, Type
+
 def ui_improve_gpt_prompt_by_data(
     agent: GPTAgent,
     training_data: List[dict],
@@ -1154,12 +1108,12 @@ def ui_improve_gpt_prompt_by_data(
     Automatically improve a GPT agent’s prompt using data-driven training, evaluation, and synthesis,
     with optional callbacks for phase updates and per-step progress.
     """
-    # ANSI colors for highlighting
     COLORS = {
         'reset': '\033[0m', 'bold': '\033[1m',
         'red': '\033[31m', 'green': '\033[32m',
         'yellow': '\033[33m', 'blue': '\033[34m',
     }
+
     def color_text(text: str, color: str = 'reset') -> str:
         return f"{COLORS.get(color, COLORS['reset'])}{text}{COLORS['reset']}"
 
@@ -1174,7 +1128,6 @@ def ui_improve_gpt_prompt_by_data(
         if on_step:
             on_step(idx, total)
 
-    # automatic evaluator (used in the test phase)
     evaluator = build('_trainer_evaluator')
     evaluator.gpt_model = trainer_model
     evaluator.max_tokens = default_max_tokens
@@ -1184,15 +1137,15 @@ def ui_improve_gpt_prompt_by_data(
         name: str,
         max_tokens: int = default_max_tokens,
         temperature: float = None,
-        json_format: str = None,
+        output_schema: Optional[Type[BaseModel]] = None,
     ):
         t = factory.build(name)
         t.gpt_model = trainer_model
         t.max_tokens = max_tokens
         if temperature is not None:
             t.temperature = temperature
-        if json_format is not None:
-            t.json_format = json_format
+        if output_schema is not None:
+            t.output_schema = output_schema
         return t
 
     total = len(training_data)
@@ -1232,10 +1185,10 @@ def ui_improve_gpt_prompt_by_data(
         '_trainer_binary_validator',
         max_tokens=200,
         temperature=0.2,
-        json_format='{result: int}'
+        output_schema=ResultSchema
     )
     instr_scores = [
-        validator.run(inputs={'evaluation': instr}).get('result', 0)
+        validator.run(inputs={'evaluation': instr}).result
         for instr in instructions
     ]
     log(color_text('✔ Validation complete', 'green'))
@@ -1249,22 +1202,22 @@ def ui_improve_gpt_prompt_by_data(
     })
     log(color_text('✔ Final instructions synthesized', 'green'))
 
-    # Phase 5: extracting de new config JSON
+    # Phase 5: extracting the new config JSON
     _phase("Extracting improved agent configuration")
     extractor = make_trainer(
         '_json_extractor',
-        json_format='{role: str, goal: str, backstory: str, knowledge: str}'
+        output_schema=AgentConfigSchema
     )
     config = extractor.run(inputs={'text': final_instructions})
     new_agent = create_agent(
-        config['role'],
-        config['goal'],
-        config['backstory'],
-        config['knowledge'],
+        config.role,
+        config.goal,
+        config.backstory,
+        config.knowledge,
     )
     log(color_text('✔ New agent created', 'green'))
 
-    # Phase 6: testing new agent e precision calculation
+    # Phase 6: testing new agent and precision calculation
     _phase("Testing improved agent")
     test_scores = []
     for idx, (instance, expected) in enumerate(zip(training_data, expected_outputs), start=1):
@@ -1276,13 +1229,12 @@ def ui_improve_gpt_prompt_by_data(
                 'input': instance,
                 'output': output,
             })
-            valid = validator.run(inputs={'evaluation': eval_resp}).get('result', 0)
+            valid = validator.run(inputs={'evaluation': eval_resp}).result
             test_scores.append((instance, output, valid, expected))
             log(color_text(f"[{idx}] Validated result: {valid}", 'yellow'))
         except Exception as e:
             log(color_text(f"✖ Error testing instance {idx}: {e}", 'red'))
 
-    # precision calculation
     tp = sum(1 for (_, _, valid, exp) in test_scores if exp and valid == 1)
     fp = sum(1 for (_, _, valid, exp) in test_scores if not exp and valid == 1)
     precision = tp / (tp + fp) if (tp + fp) else 0.0
@@ -1300,3 +1252,4 @@ def ui_improve_gpt_prompt_by_data(
     util.write_all_text('config/improved_agent.yaml', final_instructions)
 
     return final_instructions
+

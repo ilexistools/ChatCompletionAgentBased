@@ -8,4 +8,5 @@ agent = gpt.create_agent(
 )
 results = gpt.apply_agent_to_files(agent, 'data/source', verbose=True)
 for entry in results:
-    print(entry['filename'], entry['status'])
+    print(entry)
+    print(entry['filename'], entry['status'], entry['text'])
